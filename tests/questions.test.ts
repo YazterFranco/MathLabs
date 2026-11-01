@@ -68,6 +68,21 @@ function solve(q: Question): string {
     }
     case 'placeValue3':
       return String(n('h') * 100 + n('t') * 10 + n('u'));
+    case 'groups': {
+      const parts = (q.visual as string).split('   ');
+      assert.equal(parts.length, n('a'));
+      for (const g of parts) assert.equal(emojiCount(g), n('b'));
+      return String(n('a') * n('b'));
+    }
+    case 'mult2510':
+    case 'mult34':
+    case 'mult69':
+      assert.equal(q.prompt, `${n('a')} × ${n('b')} = ?`);
+      return String(n('a') * n('b'));
+    case 'divide':
+      assert.equal(n('p') % n('t'), 0, 'la división debe ser exacta');
+      assert.equal(q.prompt, `${n('p')} ÷ ${n('t')} = ?`);
+      return String(n('p') / n('t'));
     default:
       throw new Error(`sin solucionador para ${q.skillId}`);
   }
@@ -141,5 +156,29 @@ test('suma hasta 100: nivel 1 sin llevar, niveles 2 y 3 llevando', () => {
     assert.equal(carry(1), false);
     assert.equal(carry(2), true);
     assert.equal(carry(3), true);
+  }
+});
+
+test('tablas: cada habilidad usa solo sus factores y la dificultad sube', () => {
+  const factors = (skill: string, d: Difficulty) =>
+    Array.from({ length: 300 }, (_, i) => generateQuestion(skill, createRng(i + 1), d).meta as Record<string, number>);
+  const fixedOf = (m: Record<string, number>, allowed: number[]) => allowed.includes(m['a'] as number) || allowed.includes(m['b'] as number);
+  for (const d of DIFFICULTIES) {
+    assert.ok(factors('mult2510', d).every((m) => fixedOf(m, [2, 5, 10])));
+    assert.ok(factors('mult34', d).every((m) => fixedOf(m, [3, 4])));
+    assert.ok(factors('mult69', d).every((m) => fixedOf(m, [6, 7, 8, 9])));
+  }
+  assert.ok(factors('mult2510', 1).every((m) => fixedOf(m, [2, 10])), 'nivel 1: solo 2 y 10');
+  assert.ok(factors('mult69', 1).every((m) => fixedOf(m, [6, 7])), 'nivel 1: solo 6 y 7');
+  const maxProduct = (skill: string, d: Difficulty) => Math.max(...factors(skill, d).map((m) => (m['a'] as number) * (m['b'] as number)));
+  assert.ok(maxProduct('mult34', 1) <= 20);
+  assert.ok(maxProduct('mult34', 3) > 36);
+});
+
+test('división: nivel 1 solo con 2, 5 y 10; el cociente nunca es 0', () => {
+  for (let i = 1; i <= 300; i++) {
+    const m = generateQuestion('divide', createRng(i), 1).meta as Record<string, number>;
+    assert.ok([2, 5, 10].includes(m['t'] as number));
+    assert.ok((m['q'] as number) >= 1);
   }
 });

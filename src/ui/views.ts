@@ -248,6 +248,13 @@ function heartsHtml(n: number): string {
   return Array.from({ length: MAX_HEARTS }, (_, i) => `<span aria-hidden="true">${i < n ? '❤️' : '🖤'}</span>`).join('');
 }
 
+/** Los grupos se separan con 3 espacios en la pregunta; aquí cada grupo se dibuja en su propia cajita. */
+function visualHtml(visual: string): string {
+  const parts = visual.split(/\s{3,}/).filter(Boolean);
+  if (parts.length < 2) return esc(visual);
+  return parts.map((part) => `<span class="vgroup">${esc(part)}</span>`).join(' ');
+}
+
 function playTitle(play: PlayState): string {
   const ref = play.ref;
   if (ref.kind === 'level') return `${findRegion(ref.regionId).region.name} · Nivel ${ref.level + 1}`;
@@ -345,7 +352,7 @@ function playQuestion(v: ViewState, play: PlayState): string {
       ${status}${streak}
     </header>
     <section class="question card" aria-live="polite">
-      ${q.visual ? `<p class="visual" aria-label="Dibujo de la pregunta">${esc(q.visual)}</p>` : ''}
+      ${q.visual ? `<p class="visual" aria-label="Dibujo de la pregunta">${visualHtml(q.visual)}</p>` : ''}
       <h2 class="prompt">${esc(q.prompt)}</h2>
       ${p.settings.voice ? button('speak', '🔊 Escuchar', 'btn-soft btn-small') : ''}
     </section>

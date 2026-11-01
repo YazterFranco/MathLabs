@@ -22,6 +22,7 @@
 [data-theme='forest'] { --bg: #1d5c3a; --bg-2: #2f8a52; --soft: #e1f6e6; --soft-edge: #b3e0bf; }
 [data-theme='beach'] { --bg: #0e6f8c; --bg-2: #25a6c4; --soft: #def4f9; --soft-edge: #aee0ec; }
 [data-theme='mountain'] { --bg: #4a3c9a; --bg-2: #7a66d6; --soft: #ece8ff; --soft-edge: #cdc4f6; }
+[data-theme='city'] { --bg: #a33f1f; --bg-2: #e07a3a; --soft: #ffeadb; --soft-edge: #f5c9a8; }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -169,6 +170,7 @@ legend { font-weight: 800; margin-bottom: 6px; padding: 0; }
 .world[data-theme='forest'] { background: linear-gradient(180deg, #2f8a52, #1d5c3a); }
 .world[data-theme='beach'] { background: linear-gradient(180deg, #25a6c4, #0e6f8c); }
 .world[data-theme='mountain'] { background: linear-gradient(180deg, #7a66d6, #4a3c9a); }
+.world[data-theme='city'] { background: linear-gradient(180deg, #e07a3a, #a33f1f); }
 .locked-note { margin: 8px 0 0; opacity: .9; }
 .trail { display: grid; gap: 14px; margin-top: 12px; position: relative; }
 .node { display: grid; grid-template-columns: 76px 1fr; grid-template-areas: 'btn name' 'btn stars'; align-items: center; column-gap: 14px; }
@@ -207,7 +209,8 @@ legend { font-weight: 800; margin-bottom: 6px; padding: 0; }
 .power-count { grid-area: c; font-weight: 800; }
 .power-bar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .question { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; min-height: 180px; justify-content: center; }
-.visual { font-size: 2.2rem; line-height: 1.5; margin: 0; word-break: break-word; }
+.visual { font-size: 1.8rem; line-height: 1.5; margin: 0; word-break: break-word; }
+.vgroup { display: inline-block; margin: 4px; padding: 4px 10px; border: 3px dashed var(--soft-edge); border-radius: 16px; background: var(--soft); }
 .prompt { font-size: 2rem; margin: 0; }
 .choices { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .choice { width: 100%; min-height: 72px; border: 0; border-radius: 20px; background: #fff; color: var(--ink); font: inherit; font-size: 1.7rem; font-weight: 900; cursor: pointer; box-shadow: 0 6px 0 rgba(0, 0, 0, .22); padding: 8px; }

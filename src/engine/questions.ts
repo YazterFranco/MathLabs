@@ -415,6 +415,82 @@ const placeValue3: Generator = (rng, d) => {
   };
 };
 
+/* ───────────── Mundo 4 · Ciudad de las Tablas ───────────── */
+
+const groups: Generator = (rng, d) => {
+  const [aLo, aHi, bLo, bHi] = byLevel<[number, number, number, number]>(d, [2, 3, 2, 4], [2, 5, 2, 5], [3, 6, 3, 6]);
+  const a = rng.int(aLo, aHi);
+  const b = rng.int(bLo, bHi);
+  const total = a * b;
+  const emoji = rng.pick(OBJECTS);
+  const { choices, answer } = buildChoices(rng, total, [a + b, total + b, total - b, total + a, total - a], { min: 2, max: 40 });
+  return {
+    skillId: 'groups',
+    prompt: `${a} grupos de ${b}: ¿cuántos hay en total?`,
+    visual: Array.from({ length: a }, () => Array(b).fill(emoji).join(' ')).join('   '),
+    choices,
+    answer,
+    hint: `Suma ${Array(a).fill(b).join(' + ')}. Multiplicar es sumar el mismo número varias veces.`,
+    meta: { a, b },
+  };
+};
+
+/** Pregunta de tabla: el factor fijo va a la izquierda o a la derecha al azar (la multiplicación conmuta). */
+function tableQuestion(rng: Rng, skillId: string, t: number, n: number, hint: string): Question {
+  const answerValue = t * n;
+  const left = rng.chance(0.5);
+  const { choices, answer } = buildChoices(
+    rng,
+    answerValue,
+    [t * (n + 1), t * (n - 1), t + n, answerValue + t, answerValue - t, answerValue + 1, answerValue - 1],
+    { min: 0, max: 150 },
+  );
+  const [x, y] = left ? [t, n] : [n, t];
+  return { skillId, prompt: `${x} × ${y} = ?`, choices, answer, hint, meta: { a: x, b: y } };
+}
+
+const mult2510: Generator = (rng, d) => {
+  const t = d === 1 ? rng.pick([2, 10]) : rng.pick([2, 5, 10]);
+  const n = byLevel<number>(d, rng.int(1, 5), rng.int(2, 10), rng.int(6, 12));
+  const hint =
+    t === 2 ? 'Multiplicar por 2 es sumar el número dos veces.' : t === 5 ? 'Los múltiplos de 5 terminan en 0 o en 5: salta de 5 en 5.' : 'Multiplicar por 10 es poner un cero al final.';
+  return tableQuestion(rng, 'mult2510', t, n, hint);
+};
+
+const mult34: Generator = (rng, d) => {
+  const t = rng.pick([3, 4]);
+  const n = byLevel<number>(d, rng.int(1, 5), rng.int(2, 10), rng.int(6, 12));
+  const hint = t === 3 ? 'Por 3 es el doble del número más el número.' : 'Por 4 es el doble del doble.';
+  return tableQuestion(rng, 'mult34', t, n, hint);
+};
+
+const mult69: Generator = (rng, d) => {
+  const t = d === 1 ? rng.pick([6, 7]) : rng.pick([6, 7, 8, 9]);
+  const n = byLevel<number>(d, rng.int(2, 6), rng.int(2, 9), rng.int(6, 10));
+  const hint =
+    t === 6
+      ? 'Por 6 es por 5 más una vez el número.'
+      : t === 9
+        ? 'Por 9 es por 10 menos una vez el número.'
+        : 'Parte el número en dos partes fáciles, por ejemplo 5 y lo que sobra, y suma los resultados.';
+  return tableQuestion(rng, 'mult69', t, n, hint);
+};
+
+const divide: Generator = (rng, d) => {
+  const t = d === 1 ? rng.pick([2, 5, 10]) : d === 2 ? rng.pick([2, 3, 4, 5, 10]) : rng.int(2, 9);
+  const q = byLevel<number>(d, rng.int(1, 5), rng.int(2, 10), rng.int(2, 10));
+  const p = t * q;
+  const { choices, answer } = buildChoices(rng, q, [q + 1, q - 1, p - t, t, q + 2], { min: 0, max: 100 });
+  return {
+    skillId: 'divide',
+    prompt: `${p} ÷ ${t} = ?`,
+    choices,
+    answer,
+    hint: `Piensa: ¿qué número multiplicado por ${t} da ${p}?`,
+    meta: { p, t, q },
+  };
+};
+
 /* ───────────── Registro ───────────── */
 
 export const SKILLS: Skill[] = [
@@ -433,6 +509,11 @@ export const SKILLS: Skill[] = [
   { id: 'skipCount', name: 'Saltos de número', emoji: '🦘', tip: 'Fíjate cuánto cambia de un número al siguiente y repítelo.', generate: skipCount },
   { id: 'money', name: 'Monedas', emoji: '🪙', tip: 'Suma primero las monedas grandes y luego las pequeñas.', generate: money },
   { id: 'placeValue3', name: 'Centenas, decenas y unidades', emoji: '🏰', tip: 'Centena vale 100, decena vale 10 y unidad vale 1.', generate: placeValue3 },
+  { id: 'groups', name: 'Grupos iguales', emoji: '🏘️', tip: 'Cuenta cuántos grupos hay y cuántos hay en cada uno; luego suma el mismo número varias veces.', generate: groups },
+  { id: 'mult2510', name: 'Tablas del 2, 5 y 10', emoji: '🚌', tip: 'Por 2 es el doble, por 5 salta de 5 en 5 y por 10 añade un cero.', generate: mult2510 },
+  { id: 'mult34', name: 'Tablas del 3 y 4', emoji: '🚲', tip: 'Por 3 es el doble más uno; por 4 es el doble del doble.', generate: mult34 },
+  { id: 'mult69', name: 'Tablas del 6 al 9', emoji: '🚀', tip: 'Apóyate en tablas fáciles: por 6 es por 5 más uno; por 9 es por 10 menos uno.', generate: mult69 },
+  { id: 'divide', name: 'Repartir y dividir', emoji: '🍕', tip: 'Dividir es buscar qué número por el divisor da el total.', generate: divide },
 ];
 
 const BY_ID = new Map(SKILLS.map((s) => [s.id, s]));

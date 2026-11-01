@@ -71,6 +71,21 @@ export const WORLDS: World[] = [
       { id: 'w3r5', name: 'Torre de las Centenas', emoji: '🏰', skillIds: ['placeValue3'] },
     ],
   },
+  {
+    id: 4,
+    name: 'Ciudad de las Tablas',
+    emoji: '🏙️',
+    grade: '3.º grado',
+    ages: '8 a 9 años',
+    theme: 'city',
+    regions: [
+      { id: 'w4r1', name: 'Barrio de los Grupos', emoji: '🏘️', skillIds: ['groups'] },
+      { id: 'w4r2', name: 'Parada del 2, 5 y 10', emoji: '🚌', skillIds: ['mult2510'] },
+      { id: 'w4r3', name: 'Avenida del 3 y 4', emoji: '🚲', skillIds: ['mult34'] },
+      { id: 'w4r4', name: 'Aeropuerto del 6 al 9', emoji: '🚀', skillIds: ['mult69'] },
+      { id: 'w4r5', name: 'Pizzería de los Repartos', emoji: '🍕', skillIds: ['divide'] },
+    ],
+  },
 ];
 
 export interface UpcomingWorld {
@@ -82,7 +97,6 @@ export interface UpcomingWorld {
 }
 
 export const UPCOMING_WORLDS: UpcomingWorld[] = [
-  { id: 4, name: 'Ciudad de las Tablas', emoji: '🏙️', grade: '3.º grado', ages: '8 a 9 años' },
   { id: 5, name: 'Volcán de las Fracciones', emoji: '🌋', grade: '4.º grado', ages: '9 a 10 años' },
   { id: 6, name: 'Océano Decimal', emoji: '🌊', grade: '5.º grado', ages: '10 a 11 años' },
   { id: 7, name: 'Estación Espacial', emoji: '🚀', grade: '6.º grado', ages: '11 a 12 años' },
