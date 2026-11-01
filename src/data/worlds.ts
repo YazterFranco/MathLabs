@@ -86,6 +86,21 @@ export const WORLDS: World[] = [
       { id: 'w4r5', name: 'Pizzería de los Repartos', emoji: '🍕', skillIds: ['divide'] },
     ],
   },
+  {
+    id: 5,
+    name: 'Volcán de las Fracciones',
+    emoji: '🌋',
+    grade: '4.º grado',
+    ages: '9 a 10 años',
+    theme: 'volcano',
+    regions: [
+      { id: 'w5r1', name: 'Cráter de las Partes', emoji: '🌋', skillIds: ['fractionRead'] },
+      { id: 'w5r2', name: 'Río de Lava', emoji: '🌊', skillIds: ['fractionCompare'] },
+      { id: 'w5r3', name: 'Cueva de los Gemelos', emoji: '👯', skillIds: ['fractionEquiv'] },
+      { id: 'w5r4', name: 'Puente de Cristal', emoji: '🌉', skillIds: ['fractionAdd'] },
+      { id: 'w5r5', name: 'Mina de los Tesoros', emoji: '💎', skillIds: ['fractionOf'] },
+    ],
+  },
 ];
 
 export interface UpcomingWorld {
@@ -97,7 +112,6 @@ export interface UpcomingWorld {
 }
 
 export const UPCOMING_WORLDS: UpcomingWorld[] = [
-  { id: 5, name: 'Volcán de las Fracciones', emoji: '🌋', grade: '4.º grado', ages: '9 a 10 años' },
   { id: 6, name: 'Océano Decimal', emoji: '🌊', grade: '5.º grado', ages: '10 a 11 años' },
   { id: 7, name: 'Estación Espacial', emoji: '🚀', grade: '6.º grado', ages: '11 a 12 años' },
   { id: 8, name: 'Laboratorio', emoji: '🧪', grade: '7.º grado', ages: '12 a 13 años' },

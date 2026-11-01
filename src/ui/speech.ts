@@ -1,7 +1,29 @@
+const DENOMINATORS: Record<number, [one: string, many: string]> = {
+  2: ['medio', 'medios'],
+  3: ['tercio', 'tercios'],
+  4: ['cuarto', 'cuartos'],
+  5: ['quinto', 'quintos'],
+  6: ['sexto', 'sextos'],
+  7: ['séptimo', 'séptimos'],
+  8: ['octavo', 'octavos'],
+  9: ['noveno', 'novenos'],
+  10: ['décimo', 'décimos'],
+  12: ['doceavo', 'doceavos'],
+};
+
+const denominatorWord = (den: number, plural: boolean): string => DENOMINATORS[den]?.[plural ? 1 : 0] ?? '';
+
 /** Convierte la pregunta en algo que se lea bien en voz alta. */
 export function spokenText(prompt: string): string {
   return prompt
     .replace(/\p{Extended_Pictographic}/gu, ' ')
+    .replace(/__\/(\d+)/g, (_m, den: string) => ` espacio en blanco ${denominatorWord(Number(den), true) || `sobre ${den}`} `)
+    .replace(/(\d+)\/(\d+)/g, (_m, num: string, den: string) => {
+      const word = denominatorWord(Number(den), Number(num) !== 1);
+      if (!word) return ` ${num} sobre ${den} `;
+      return Number(num) === 1 ? ` un ${word} ` : ` ${num} ${word} `;
+    })
+    .replace(/÷/g, ' entre ')
     .replace(/\+/g, ' más ')
     .replace(/−/g, ' menos ')
     .replace(/×/g, ' por ')

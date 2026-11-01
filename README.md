@@ -2,11 +2,11 @@
 
 Juego web de matemáticas para niños, desde preescolar (5 años) hacia secundaria. El niño avanza **solo cuando demuestra dominio**, con potenciadores, combos, mascota y un guardado local.
 
-> Esta versión incluye los **mundos 1 a 4** (preescolar a 3.º grado: 20 regiones y 20 habilidades, hasta tablas de multiplicar y división). Los mundos 5 a 11 (hasta 12.º grado) aparecen como «Próximamente».
+> Esta versión incluye los **mundos 1 a 5** (preescolar a 4.º grado: 25 regiones y 25 habilidades, hasta tablas de multiplicar, división y fracciones). Los mundos 6 a 11 (hasta 12.º grado) aparecen como «Próximamente».
 
 ## Cómo se juega
 
-- **Mapa**: 4 mundos, 5 regiones cada uno. Cada región tiene 3 niveles de 8 preguntas y un **Reto del Guardián**.
+- **Mapa**: 5 mundos, 5 regiones cada uno. Cada región tiene 3 niveles de 8 preguntas y un **Reto del Guardián**.
 - **Corazones y combos** (solo en niveles): 3 corazones. Cada 3 aciertos seguidos se activa la **Chispa** (la siguiente vale doble). Cada 5, el **Rayo** devuelve un corazón.
 - **Potenciadores**: Lupa (tacha 2 opciones), Pista mágica y Escudo (un error no rompe la racha). Una vez por nivel; se ganan jugando.
 - **Evidencia de dominio**: se sube de región solo al vencer al Guardián (10 preguntas **sin ayudas**, 9 aciertos para pasar). Las habilidades se confirman como «Dominadas» con **repasos espaciados** (1, 3, 7 y 14 días).
@@ -43,7 +43,7 @@ scripts/      build.mjs y serve.mjs
 tests/        pruebas del motor y prueba E2E
 ```
 
-Las pruebas recalculan cada respuesta con un solucionador independiente para 20 habilidades × 3 dificultades × 300 semillas.
+Las pruebas recalculan cada respuesta con un solucionador independiente para 25 habilidades × 3 dificultades × 300 semillas.
 
 ## Publicar en Cloudflare Pages (gratis)
 
@@ -58,4 +58,4 @@ Cada `git push` a `main` vuelve a publicar.
 
 ## Pendiente
 
-Mundos 5 a 11 (fracciones, decimales, geometría, álgebra, funciones…), motor adaptativo de dificultad, prueba diagnóstica inicial, sincronización en la nube con cuenta de familia (hoy el progreso vive en el dispositivo), y migrar el guardado a IndexedDB si crece.
+Mundos 6 a 11 (decimales, geometría, álgebra, funciones…), motor adaptativo de dificultad, prueba diagnóstica inicial, sincronización en la nube con cuenta de familia (hoy el progreso vive en el dispositivo), y migrar el guardado a IndexedDB si crece.

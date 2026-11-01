@@ -83,6 +83,31 @@ function solve(q: Question): string {
       assert.equal(n('p') % n('t'), 0, 'la división debe ser exacta');
       assert.equal(q.prompt, `${n('p')} ÷ ${n('t')} = ?`);
       return String(n('p') / n('t'));
+    case 'fractionRead': {
+      const cells = (q.visual as string).split(' ');
+      assert.equal(cells.length, n('parts'));
+      assert.equal(cells.filter((c) => c === '🟧').length, n('n'));
+      return `${n('n')}/${n('parts')}`;
+    }
+    case 'fractionCompare': {
+      const f = m['fracs'] as number[];
+      const list = Array.from({ length: f.length / 2 }, (_, i) => [f[2 * i] as number, f[2 * i + 1] as number]);
+      assert.deepEqual(q.choices.slice().sort(), list.map(([a, b]) => `${a}/${b}`).sort());
+      const best = list.reduce((x, y) => ((y[0] as number) * (x[1] as number) > (x[0] as number) * (y[1] as number) === (m['mode'] === 'max') ? y : x));
+      return `${best[0]}/${best[1]}`;
+    }
+    case 'fractionEquiv':
+      assert.equal(q.prompt, `${n('n')}/${n('den')} = __/${n('den') * n('k')}`);
+      return String(n('n') * n('k'));
+    case 'fractionAdd': {
+      const sub = m['kind'] === 'sub';
+      assert.equal(q.prompt, `${n('a')}/${n('den')} ${sub ? '−' : '+'} ${n('b')}/${n('den')} = ?`);
+      return `${sub ? n('a') - n('b') : n('a') + n('b')}/${n('den')}`;
+    }
+    case 'fractionOf':
+      assert.equal(n('total') % n('den'), 0, 'la fracción debe dar un número entero');
+      assert.equal(q.prompt, `${n('n')}/${n('den')} de ${n('total')} = ?`);
+      return String((n('total') / n('den')) * n('n'));
     default:
       throw new Error(`sin solucionador para ${q.skillId}`);
   }
@@ -180,5 +205,31 @@ test('división: nivel 1 solo con 2, 5 y 10; el cociente nunca es 0', () => {
     const m = generateQuestion('divide', createRng(i), 1).meta as Record<string, number>;
     assert.ok([2, 5, 10].includes(m['t'] as number));
     assert.ok((m['q'] as number) >= 1);
+  }
+});
+
+test('fracciones: ninguna opción repite el valor de otra y todas son propias cuando corresponde', () => {
+  const value = (c: string) => {
+    const [a = 0, b = 1] = c.split('/').map(Number);
+    return a / b;
+  };
+  for (const skill of ['fractionRead', 'fractionCompare', 'fractionAdd']) {
+    for (const d of DIFFICULTIES) {
+      for (let seed = 1; seed <= 300; seed++) {
+        const q = generateQuestion(skill, createRng(seed), d);
+        const values = q.choices.map(value);
+        assert.equal(new Set(values.map((v) => v.toFixed(9))).size, values.length, `${skill} d${d} seed${seed}: ${q.choices}`);
+        assert.ok(values.every((v) => v < 1), `${skill} d${d} seed${seed}: fracción impropia en ${q.choices}`);
+      }
+    }
+  }
+});
+
+test('fracciones: el nivel 1 compara con el mismo denominador y el nivel 2 con el mismo numerador', () => {
+  for (let seed = 1; seed <= 200; seed++) {
+    const f1 = generateQuestion('fractionCompare', createRng(seed), 1).meta['fracs'] as number[];
+    assert.ok(f1.filter((_, i) => i % 2 === 1).every((x) => x === f1[1]));
+    const f2 = generateQuestion('fractionCompare', createRng(seed), 2).meta['fracs'] as number[];
+    assert.ok(f2.filter((_, i) => i % 2 === 0).every((x) => x === f2[0]));
   }
 });

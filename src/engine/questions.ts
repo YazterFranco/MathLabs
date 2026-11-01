@@ -491,6 +491,155 @@ const divide: Generator = (rng, d) => {
   };
 };
 
+/* ───────────── Mundo 5 · Volcán de las Fracciones ───────────── */
+
+type Frac = [num: number, den: number];
+const fr = ([n, d]: Frac): string => `${n}/${d}`;
+const sameValue = (a: Frac, b: Frac): boolean => a[0] * b[1] === b[0] * a[1];
+
+/** Opciones de fracciones: nunca repite un valor (1/2 y 2/4 no pueden estar juntas) y no deja respuestas ambiguas. */
+function fractionChoices(rng: Rng, answer: Frac, wrongs: Frac[], proper = true, count = 4): { choices: string[]; answer: string } {
+  const picked: Frac[] = [];
+  const valid = (w: Frac): boolean =>
+    Number.isInteger(w[0]) && Number.isInteger(w[1]) && w[0] >= 1 && w[1] >= 2 && (!proper || w[0] < w[1]) && !sameValue(w, answer) && !picked.some((p) => sameValue(p, w));
+  for (const w of rng.shuffle(wrongs)) if (picked.length < count - 1 && valid(w)) picked.push(w);
+  for (let k = 1; picked.length < count - 1 && k <= 12; k++) {
+    const near: Frac[] = [[answer[0] + k, answer[1]], [answer[0] - k, answer[1]], [answer[0], answer[1] + k], [answer[0], answer[1] - k]];
+    for (const w of rng.shuffle(near)) if (picked.length < count - 1 && valid(w)) picked.push(w);
+  }
+  return { choices: rng.shuffle([answer, ...picked]).map(fr), answer: fr(answer) };
+}
+
+const fractionRead: Generator = (rng, d) => {
+  const parts = byLevel<number>(d, rng.int(2, 4), rng.int(3, 6), rng.int(5, 10));
+  const n = rng.int(1, parts - 1);
+  const { choices, answer } = fractionChoices(rng, [n, parts], [[parts - n, parts], [n, parts - n], [parts, n], [n + 1, parts], [n, parts + 1]]);
+  const bar = Array.from({ length: parts }, (_, i) => (i < n ? '🟧' : '⬜')).join(' ');
+  return {
+    skillId: 'fractionRead',
+    prompt: '¿Qué fracción está pintada?',
+    visual: bar,
+    choices,
+    answer,
+    hint: 'Arriba va cuántas partes están pintadas; abajo, en cuántas partes iguales se partió todo.',
+    meta: { n, parts },
+  };
+};
+
+const fractionCompare: Generator = (rng, d) => {
+  let fracs: Frac[];
+  if (d === 1) {
+    const den = rng.int(4, 10);
+    const nums = rng.shuffle(Array.from({ length: den - 1 }, (_, i) => i + 1)).slice(0, 3);
+    fracs = nums.map((x) => [x, den] as Frac);
+  } else if (d === 2) {
+    const num = rng.int(1, 4);
+    const dens = rng.shuffle(Array.from({ length: 12 - num }, (_, i) => num + 1 + i)).slice(0, 3);
+    fracs = dens.map((x) => [num, x] as Frac);
+  } else {
+    const dens = [2, 3, 4, 5, 6, 8, 10, 12];
+    fracs = sample<Frac[]>(
+      () => Array.from({ length: 4 }, () => { const den = rng.pick(dens); return [rng.int(1, den - 1), den] as Frac; }),
+      (list) => list.every((a, i) => list.every((b, j) => i === j || !sameValue(a, b))),
+    );
+  }
+  const mode = d === 1 ? 'max' : rng.pick(['max', 'min']);
+  const best = fracs.reduce((a, b) => {
+    const bigger = b[0] * a[1] > a[0] * b[1];
+    return (mode === 'max') === bigger ? b : a;
+  });
+  const hint =
+    d === 1
+      ? 'Si las partes son del mismo tamaño, gana la que tiene más partes pintadas.'
+      : d === 2
+        ? 'Con el mismo número arriba, entre más partes tiene el entero, más pequeña es cada parte.'
+        : 'Compara cada una con 1/2, o busca fracciones equivalentes con el mismo número abajo.';
+  return {
+    skillId: 'fractionCompare',
+    prompt: mode === 'max' ? '¿Cuál fracción es la mayor?' : '¿Cuál fracción es la menor?',
+    choices: fracs.map(fr),
+    answer: fr(best),
+    hint,
+    meta: { fracs: fracs.flat(), mode },
+  };
+};
+
+const fractionEquiv: Generator = (rng, d) => {
+  const den = d === 1 ? rng.int(2, 4) : rng.int(2, d === 2 ? 5 : 6);
+  const n = d === 1 ? 1 : rng.int(1, den - 1);
+  const k = d === 1 ? 2 : rng.int(2, d === 2 ? 3 : 5);
+  const target = n * k;
+  const { choices, answer } = buildChoices(rng, target, [n + (den * k - den), target + 1, target - 1, n + k, target + k], { min: 1, max: 60 });
+  return {
+    skillId: 'fractionEquiv',
+    prompt: `${n}/${den} = __/${den * k}`,
+    choices,
+    answer,
+    hint: `El de abajo se multiplicó por ${k}; multiplica también el de arriba por ${k}.`,
+    meta: { n, den, k },
+  };
+};
+
+const fractionAdd: Generator = (rng, d) => {
+  const den = byLevel<number>(d, rng.int(3, 6), rng.int(5, 10), rng.int(5, 12));
+  const sub = d === 3 && rng.chance(0.5);
+  let a: number;
+  let b: number;
+  if (sub) {
+    a = rng.int(2, den - 1);
+    b = rng.int(1, a - 1);
+  } else {
+    a = rng.int(1, den - 2);
+    b = rng.int(1, den - 1 - a);
+  }
+  const result = sub ? a - b : a + b;
+  const { choices, answer } = fractionChoices(
+    rng,
+    [result, den],
+    sub
+      ? [[a + b, den], [result + 1, den], [result - 1, den], [result, 2 * den]]
+      : [[result, 2 * den], [result + 1, den], [result - 1, den], [a * b, den], [result + 2, den]],
+  );
+  return {
+    skillId: 'fractionAdd',
+    prompt: `${a}/${den} ${sub ? '−' : '+'} ${b}/${den} = ?`,
+    choices,
+    answer,
+    hint: 'Las partes son del mismo tamaño: suma o resta solo los de arriba y deja el de abajo igual.',
+    meta: { a, b, den, kind: sub ? 'sub' : 'add' },
+  };
+};
+
+const fractionOf: Generator = (rng, d) => {
+  let n: number;
+  let den: number;
+  let q: number;
+  if (d === 1) {
+    n = 1;
+    den = rng.int(2, 4);
+    q = rng.int(1, 5);
+  } else if (d === 2) {
+    n = 1;
+    den = rng.pick([2, 3, 4, 5, 6, 8, 10]);
+    q = rng.int(2, 8);
+  } else {
+    den = rng.pick([3, 4, 5, 6, 8]);
+    n = rng.int(2, den - 1);
+    q = rng.int(2, 10);
+  }
+  const total = den * q;
+  const result = n * q;
+  const { choices, answer } = buildChoices(rng, result, [q, result + q, result - q, total - result, n * den, result + 1], { min: 1, max: 100 });
+  return {
+    skillId: 'fractionOf',
+    prompt: `${n}/${den} de ${total} = ?`,
+    choices,
+    answer,
+    hint: `Reparte ${total} en ${den} partes iguales${n > 1 ? ` y toma ${n} de ellas` : ''}: divide entre ${den}${n > 1 ? ` y multiplica por ${n}` : ''}.`,
+    meta: { n, den, total },
+  };
+};
+
 /* ───────────── Registro ───────────── */
 
 export const SKILLS: Skill[] = [
@@ -514,6 +663,11 @@ export const SKILLS: Skill[] = [
   { id: 'mult34', name: 'Tablas del 3 y 4', emoji: '🚲', tip: 'Por 3 es el doble más uno; por 4 es el doble del doble.', generate: mult34 },
   { id: 'mult69', name: 'Tablas del 6 al 9', emoji: '🚀', tip: 'Apóyate en tablas fáciles: por 6 es por 5 más uno; por 9 es por 10 menos uno.', generate: mult69 },
   { id: 'divide', name: 'Repartir y dividir', emoji: '🍕', tip: 'Dividir es buscar qué número por el divisor da el total.', generate: divide },
+  { id: 'fractionRead', name: 'Leer fracciones', emoji: '🌋', tip: 'Abajo: en cuántas partes iguales se partió el entero. Arriba: cuántas partes se toman.', generate: fractionRead },
+  { id: 'fractionCompare', name: 'Comparar fracciones', emoji: '🌊', tip: 'Mismo número abajo: gana el de arriba mayor. Mismo número arriba: gana el de abajo menor.', generate: fractionCompare },
+  { id: 'fractionEquiv', name: 'Fracciones equivalentes', emoji: '👯', tip: 'Lo que le hagas al número de abajo, hazlo también al de arriba.', generate: fractionEquiv },
+  { id: 'fractionAdd', name: 'Sumar y restar fracciones', emoji: '🌉', tip: 'Con el mismo número abajo, suma o resta solo los de arriba.', generate: fractionAdd },
+  { id: 'fractionOf', name: 'Fracción de un número', emoji: '💎', tip: 'Divide entre el de abajo y multiplica por el de arriba.', generate: fractionOf },
 ];
 
 const BY_ID = new Map(SKILLS.map((s) => [s.id, s]));
