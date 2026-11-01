@@ -1,0 +1,13 @@
+{
+  "name": "Matemundo",
+  "short_name": "Matemundo",
+  "description": "Juego de matemáticas para niños, de preescolar a secundaria.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#2b2d6e",
+  "theme_color": "#2b2d6e",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
