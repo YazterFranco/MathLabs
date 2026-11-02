@@ -1,8 +1,9 @@
-import { findRegion, LEVELS_PER_REGION } from '../data/worlds.ts';
-import { buildGuardianQuestions, buildLevelQuestions, buildReviewQuestions } from '../engine/builders.ts';
+import { findRegion, LEVELS_PER_REGION, PLACEMENT_PASS_COUNT, WORLDS } from '../data/worlds.ts';
+import { buildGuardianQuestions, buildLevelQuestions, buildPlacementQuestions, buildReviewQuestions } from '../engine/builders.ts';
 import { dayKey, type DayKey } from '../engine/dates.ts';
 import {
   applyOutcome,
+  applyPlacement,
   buyItem,
   claimChest,
   dueSkills,
@@ -32,7 +33,7 @@ import { POWER_INFO } from '../data/shop.ts';
 import type { PowerKind } from '../engine/types.ts';
 import { Sound } from './sound.ts';
 import { canSpeak, speak, spokenText, stopSpeaking } from './speech.ts';
-import type { GateState, PlayState, ResultState, Screen, ViewState } from './state.ts';
+import type { GateState, PlacementState, PlayState, ResultState, Screen, ViewState } from './state.ts';
 import { renderView } from './views.ts';
 
 export interface SpeechApi {
@@ -66,6 +67,7 @@ const GUARDED = new Set([
   'result-map',
   'back-map',
   'open-shop',
+  'begin-placement',
 ]);
 
 export class App {
@@ -80,6 +82,7 @@ export class App {
   private screen: Screen = 'welcome';
   private regionId: string | null = null;
   private play: PlayState | null = null;
+  private placement: PlacementState | null = null;
   private result: ResultState | null = null;
   private gate: GateState | null = null;
   private gateThen: (() => void) | null = null;
@@ -110,8 +113,8 @@ export class App {
 
   /* ───────────── Acceso para pruebas ───────────── */
 
-  get state(): { screen: Screen; save: SaveFile; play: PlayState | null; result: ResultState | null } {
-    return { screen: this.screen, save: this.saveFile, play: this.play, result: this.result };
+  get state(): { screen: Screen; save: SaveFile; play: PlayState | null; placement: PlacementState | null; result: ResultState | null } {
+    return { screen: this.screen, save: this.saveFile, play: this.play, placement: this.placement, result: this.result };
   }
 
   /* ───────────── Utilidades ───────────── */
@@ -177,6 +180,7 @@ export class App {
       profile: p,
       regionId: this.regionId,
       play: this.play,
+      placement: this.placement,
       result: this.result,
       gate: this.gate,
       toast: this.toastText,
@@ -265,10 +269,21 @@ export class App {
   }
 
   private onKey(e: KeyboardEvent): void {
-    const pl = this.play;
-    if (this.screen !== 'play' || !pl || pl.phase !== 'asking' || this.gate) return;
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (this.gate || e.ctrlKey || e.metaKey || e.altKey) return;
     const n = Number(e.key);
+    if (this.screen === 'placement') {
+      const pl = this.placement;
+      if (!pl || pl.phase !== 'asking') return;
+      const choice = pl.session.current.choices[n - 1];
+      if (choice !== undefined) {
+        this.tickClock();
+        this.placementAnswer(choice);
+        this.render();
+      }
+      return;
+    }
+    const pl = this.play;
+    if (this.screen !== 'play' || !pl || pl.phase !== 'asking') return;
     if (n >= 1 && n <= pl.session.current.choices.length) {
       const choice = pl.session.current.choices[n - 1] as string;
       if (!pl.session.eliminated.has(choice)) {
@@ -318,6 +333,7 @@ export class App {
       case 'sleep-map':
         this.clearAdvance();
         this.play = null;
+        this.placement = null;
         this.regionId = null;
         this.go(action === 'sleep-map' ? 'welcome' : 'map');
         break;
@@ -340,7 +356,23 @@ export class App {
         this.usePower(id as PowerKind);
         break;
       case 'answer':
-        this.answer(el.dataset['choice'] ?? '');
+        if (this.screen === 'placement') this.placementAnswer(el.dataset['choice'] ?? '');
+        else this.answer(el.dataset['choice'] ?? '');
+        break;
+      case 'start-placement':
+        this.go('placement-intro');
+        break;
+      case 'skip-placement':
+        this.go('map');
+        break;
+      case 'begin-placement':
+        this.beginPlacement();
+        break;
+      case 'quit-placement':
+        this.clearAdvance();
+        this.speech.stop();
+        this.placement = null;
+        this.go('map');
         break;
       case 'continue':
         this.advance();
@@ -422,7 +454,8 @@ export class App {
     this.saveFile.activeId = profile.id;
     this.sound.enabled = profile.settings.sound;
     this.save();
-    this.go('map');
+    // A partir de 7 años se ofrece la prueba de nivel; con 5 o 6 se empieza por el principio.
+    this.go(ageBand === '5-6' ? 'map' : 'placement-intro');
   }
 
   private selectProfile(id: string): void {
@@ -499,9 +532,80 @@ export class App {
   }
 
   private speakCurrent(): void {
-    const pl = this.play;
-    if (!pl || !this.speech.can()) return;
-    this.speech.speak(spokenText(pl.session.current.prompt));
+    const session = this.screen === 'placement' ? this.placement?.session : this.play?.session;
+    if (!session || !this.speech.can()) return;
+    this.speech.speak(spokenText(session.current.prompt));
+  }
+
+  /* ───────────── Prueba de nivel ───────────── */
+
+  private startPlacementWorld(index: number, scores: number[]): void {
+    const world = WORLDS[index];
+    if (!world) return;
+    this.placement = {
+      worldIndex: index,
+      session: new Session('review', buildPlacementQuestions(this.rng, world)),
+      pick: null,
+      phase: 'asking',
+      scores,
+      placed: null,
+    };
+  }
+
+  private beginPlacement(): void {
+    this.clearAdvance();
+    this.play = null;
+    this.startPlacementWorld(0, []);
+    this.go('placement');
+    this.speakIfEnabled();
+  }
+
+  private placementAnswer(choice: string): void {
+    const pl = this.placement;
+    const p = this.profile;
+    if (!pl || !p || pl.phase !== 'asking') return;
+    const q = pl.session.current;
+    const res = pl.session.answer(choice);
+    recordAttempt(p, q.skillId, res.correct, this.today);
+    this.save();
+    pl.pick = choice;
+    pl.phase = 'feedback';
+    this.clearAdvance();
+    this.advanceTimer = setTimeout(() => {
+      this.advanceTimer = null;
+      this.tickClock();
+      this.placementAdvance();
+      this.render();
+    }, 650);
+  }
+
+  /** Pasa a la siguiente pregunta; al cerrar un mundo decide si se sigue (4 de 5) o se termina. */
+  private placementAdvance(): void {
+    const pl = this.placement;
+    const p = this.profile;
+    if (!pl || !p || pl.phase !== 'feedback') return;
+    if (!pl.session.finished) {
+      pl.session.next();
+      pl.phase = 'asking';
+      pl.pick = null;
+      this.speakIfEnabled();
+      return;
+    }
+    const scores = [...pl.scores, pl.session.correctCount];
+    const passed = pl.session.correctCount >= PLACEMENT_PASS_COUNT;
+    if (passed && pl.worldIndex < WORLDS.length - 1) {
+      this.startPlacementWorld(pl.worldIndex + 1, scores);
+      this.speakIfEnabled();
+      return;
+    }
+    const placed = passed ? WORLDS.length : pl.worldIndex;
+    pl.scores = scores;
+    pl.placed = placed;
+    applyPlacement(p, placed, scores, this.today);
+    this.save();
+    this.speech.stop();
+    this.sound.play(placed > 0 ? 'win' : 'ok');
+    this.go('placement-result');
   }
 
   private usePower(kind: PowerKind): void {

@@ -59,3 +59,8 @@ export function buildReviewQuestions(rng: Rng, skillIds: string[]): Question[] {
   }));
   return rng.shuffle(buildSet(rng, plan));
 }
+
+/** Prueba de nivel de un mundo: una pregunta de dificultad media por cada región, sin ayudas. */
+export function buildPlacementQuestions(rng: Rng, world: World): Question[] {
+  return world.regions.map((r) => generateQuestion(r.skillIds[0] as string, rng, 2));
+}

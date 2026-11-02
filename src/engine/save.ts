@@ -43,6 +43,14 @@ export interface RegionProgress {
   guardianTries: number;
 }
 
+export interface Placement {
+  date: DayKey;
+  /** Mundos superados en la prueba: del 1 al `placed` se dan por sabidos. */
+  placed: number;
+  /** Aciertos en cada mundo evaluado (de 5). */
+  scores: number[];
+}
+
 export interface Profile {
   id: string;
   nickname: string;
@@ -62,6 +70,8 @@ export interface Profile {
   streak: { days: number; lastDay: DayKey | null; freezes: number; weekKey: DayKey | null };
   chestLastDay: DayKey | null;
   evidence: EvidenceEntry[];
+  /** Resultado de la prueba de nivel (una sola vez por explorador). */
+  placement: Placement | null;
   settings: { sound: boolean; voice: boolean };
 }
 
@@ -125,6 +135,7 @@ export function newProfile(input: NewProfileInput, today: DayKey, id?: string): 
     streak: { days: 0, lastDay: null, freezes: 1, weekKey: null },
     chestLastDay: null,
     evidence: [],
+    placement: null,
     settings: { sound: true, voice: input.ageBand === '5-6' },
   };
 }
@@ -210,6 +221,15 @@ export function parseSave(raw: string): SaveFile | null {
     merged.skills = isRecord(item['skills']) ? (item['skills'] as Profile['skills']) : {};
     merged.regions = isRecord(item['regions']) ? (item['regions'] as Profile['regions']) : {};
     merged.evidence = Array.isArray(item['evidence']) ? (item['evidence'] as EvidenceEntry[]).slice(-MAX_EVIDENCE) : [];
+    const pl = item['placement'];
+    merged.placement =
+      isRecord(pl) && typeof pl['placed'] === 'number' && typeof pl['date'] === 'string' && Array.isArray(pl['scores'])
+        ? {
+            date: pl['date'],
+            placed: Math.max(0, Math.min(50, Math.floor(pl['placed']))),
+            scores: (pl['scores'] as unknown[]).filter((x): x is number => typeof x === 'number').slice(0, 50),
+          }
+        : null;
     profiles.push(merged);
   }
   const activeId = typeof data['activeId'] === 'string' ? data['activeId'] : null;

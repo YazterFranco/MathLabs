@@ -3,6 +3,7 @@ import {
   GUARDIAN_PASS_COUNT,
   GUARDIAN_QUESTIONS,
   LEVELS_PER_REGION,
+  PLACEMENT_PASS_COUNT,
   MAX_HEARTS,
   UPCOMING_WORLDS,
   WORLDS,
@@ -22,7 +23,7 @@ import { getSkill } from '../engine/questions.ts';
 import { MAX_PROFILES, SESSION_LIMITS, regionProgress, skillProgress, type Profile } from '../engine/save.ts';
 import type { PowerKind } from '../engine/types.ts';
 import { esc, shortDate } from './dom.ts';
-import type { PlayState, ResultState, ViewState } from './state.ts';
+import type { PlacementState, PlayState, ResultState, ViewState } from './state.ts';
 
 const POWERS: PowerKind[] = ['lupa', 'pista', 'escudo'];
 
@@ -197,6 +198,7 @@ function map(v: ViewState): string {
     </section>
     <div class="actions">
       ${chestReady ? button('claim-chest', '🎁 Cofre del día', 'btn-gold') : '<span class="muted pill">🎁 Cofre abierto, vuelve mañana</span>'}
+      ${!p.placement && !regionProgress(p, 'w1r1').guardianPassed ? button('start-placement', '🎯 Prueba de nivel', 'btn-soft') : ''}
       ${v.dueCount > 0 ? button('start-review', `🔁 Repaso (${v.dueCount})`, 'btn-primary') : ''}
       ${button('open-shop', '🛍️ Tienda', 'btn-soft')}
       ${button('open-parents', '👪 Familias', 'btn-ghost')}
@@ -461,6 +463,15 @@ function shop(v: ViewState): string {
   </main>`;
 }
 
+function placementSummary(p: Profile): string {
+  const pl = p.placement;
+  if (!pl) return '';
+  const next = WORLDS[pl.placed];
+  return `<p><strong>${shortDate(pl.date)}</strong> · Prueba de nivel: ${pl.scores.map((x, i) => `Mundo ${i + 1} ${x}/5`).join(', ')}. ${
+    pl.placed === 0 ? 'Empezó desde el principio.' : next ? `Empezó en el mundo ${next.id}.` : 'Superó todos los mundos disponibles.'
+  }</p>`;
+}
+
 function parents(v: ViewState): string {
   const p = v.profile as Profile;
   const worlds = WORLDS.map(
@@ -510,7 +521,7 @@ function parents(v: ViewState): string {
     <section class="card"><h2>Progreso de ${esc(p.nickname)}</h2>
       <p class="muted">Una habilidad pasa a «Competente» con 100% en un nivel o al vencer al Guardián (${GUARDIAN_PASS_COUNT} de ${GUARDIAN_QUESTIONS}). Se confirma como «Dominada» al repasarla días después.</p>
       ${worlds}</section>
-    <section class="card"><h2>Últimas pruebas</h2>${evHtml}</section>
+    <section class="card"><h2>Últimas pruebas</h2>${placementSummary(p)}${evHtml}</section>
     <section class="card"><h2>Datos</h2>
       <p>Todo se guarda solo en este dispositivo. No hay cuentas ni analíticas.</p>
       <div class="stack">
@@ -519,6 +530,92 @@ function parents(v: ViewState): string {
         ${button('reset-progress', 'Reiniciar progreso de este explorador', 'btn-danger')}
         ${button('delete-profile', 'Eliminar este explorador', 'btn-danger')}
       </div>
+    </section>
+  </main>`;
+}
+
+function placementIntro(v: ViewState): string {
+  const p = v.profile as Profile;
+  return `<main class="screen">
+    <section class="card">
+      <p class="big-emoji" aria-hidden="true">🎯</p>
+      <h1>Prueba de nivel</h1>
+      <p>${esc(p.nickname)}, ¿quieres empezar donde ya sabes? Haz una prueba corta, sin ayudas:</p>
+      <ul class="bullets">
+        <li>5 preguntas por mundo. Con ${PLACEMENT_PASS_COUNT} aciertos pasas al siguiente mundo.</li>
+        <li>Se detiene en el primer mundo que no domines y ahí empiezas.</li>
+        <li>Los temas que saltes volverán como repasos en los próximos días, para confirmar que los dominas.</li>
+        <li>No ganas estrellas por saltar. Dura unos 5 minutos.</li>
+      </ul>
+      <div class="stack">
+        ${button('begin-placement', 'Hacer la prueba', 'btn-primary btn-xl')}
+        ${button('skip-placement', 'Empezar desde el principio', 'btn-soft')}
+      </div>
+    </section>
+  </main>`;
+}
+
+function placementQuestion(v: ViewState, pl: PlacementState): string {
+  const p = v.profile as Profile;
+  const world = WORLDS[pl.worldIndex] as World;
+  const s = pl.session;
+  const q = s.current;
+  const locked = pl.phase === 'feedback';
+  const choices = q.choices
+    .map(
+      (c) => `<li><button type="button" class="choice ${pl.pick === c ? 'is-picked' : ''}" data-action="answer" data-choice="${esc(c)}" ${locked ? 'disabled' : ''}>${esc(c)}</button></li>`,
+    )
+    .join('');
+  const pct = Math.round((s.index / s.total) * 100);
+  return `<main class="screen play">
+    <header class="topbar">
+      ${button('quit-placement', '✕', 'btn-ghost btn-icon', 'aria-label="Salir de la prueba"')}
+      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${s.total}" aria-valuenow="${s.index}" aria-label="Pregunta ${s.index + 1} de ${s.total}"><span style="width:${pct}%"></span></div>
+      <span class="pill">${world.emoji} Mundo ${world.id}</span>
+    </header>
+    <section class="question card" aria-live="polite">
+      ${q.visual ? `<p class="visual" aria-label="Dibujo de la pregunta">${visualHtml(q.visual)}</p>` : ''}
+      <h2 class="prompt">${esc(q.prompt)}</h2>
+      ${p.settings.voice ? button('speak', '🔊 Escuchar', 'btn-soft btn-small') : ''}
+    </section>
+    <ul class="choices">${choices}</ul>
+    ${locked ? '<p class="feedback neutral" role="status">Respuesta guardada.</p>' : ''}
+  </main>`;
+}
+
+function placementResult(v: ViewState): string {
+  const p = v.profile as Profile;
+  const pl = v.placement as PlacementState;
+  const placed = pl.placed ?? 0;
+  const done = WORLDS.slice(0, placed);
+  const next = WORLDS[placed];
+  const rows = pl.scores
+    .map((score, i) => {
+      const w = WORLDS[i] as World;
+      const ok = score >= PLACEMENT_PASS_COUNT;
+      return `<li>${ok ? '✅' : '🔎'} ${w.emoji} ${esc(w.name)}: ${score} de ${w.regions.length}</li>`;
+    })
+    .join('');
+  let headline: string;
+  let detail: string;
+  if (!next) {
+    headline = '¡Increíble! Dominas todos los mundos de hoy';
+    detail = 'Los repasos te irán confirmando cada tema. Pronto habrá más mundos.';
+  } else if (placed === 0) {
+    headline = `Empiezas en el ${next.emoji} ${next.name}`;
+    detail = 'Vas a avanzar paso a paso y a ganar tus primeras estrellas. ¡Perfecto!';
+  } else {
+    headline = `¡Saltas ${done.length === 1 ? 'un mundo' : `${done.length} mundos`}! Empiezas en el ${next.emoji} ${next.name}`;
+    detail = 'Los temas que saltaste volverán como repasos en los próximos días para confirmar que los dominas.';
+  }
+  return `<main class="screen result">
+    <section class="card center">
+      <p class="big-emoji" aria-hidden="true">${placed === 0 ? '🌱' : '🚀'}</p>
+      <h1>${headline}</h1>
+      <p class="lead">${detail}</p>
+      <ul class="rewards">${rows}</ul>
+      <p class="muted">${esc(p.nickname)}, tu prueba quedó guardada en el panel de familias.</p>
+      <div class="stack">${button('back-map', 'Ir al mapa', 'btn-primary btn-xl')}</div>
     </section>
   </main>`;
 }
@@ -538,7 +635,9 @@ function sleep(v: ViewState): string {
 
 export function renderView(v: ViewState): string {
   let theme = 'home';
-  if (v.regionId) {
+  if (v.screen === 'placement' && v.placement) {
+    theme = (WORLDS[v.placement.worldIndex] as World).theme;
+  } else if (v.regionId) {
     try {
       theme = findRegion(v.regionId).world.theme;
     } catch {
@@ -575,6 +674,15 @@ export function renderView(v: ViewState): string {
       break;
     case 'parents':
       body = parents(v);
+      break;
+    case 'placement-intro':
+      body = placementIntro(v);
+      break;
+    case 'placement':
+      body = placementQuestion(v, v.placement as PlacementState);
+      break;
+    case 'placement-result':
+      body = placementResult(v);
       break;
     default:
       body = sleep(v);

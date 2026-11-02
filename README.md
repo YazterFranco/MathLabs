@@ -10,6 +10,7 @@ Juego web de matemáticas para niños, desde preescolar (5 años) hacia secundar
 - **Corazones y combos** (solo en niveles): 3 corazones. Cada 3 aciertos seguidos se activa la **Chispa** (la siguiente vale doble). Cada 5, el **Rayo** devuelve un corazón.
 - **Potenciadores**: Lupa (tacha 2 opciones), Pista mágica y Escudo (un error no rompe la racha). Una vez por nivel; se ganan jugando.
 - **Evidencia de dominio**: se sube de región solo al vencer al Guardián (10 preguntas **sin ayudas**, 9 aciertos para pasar). Las habilidades se confirman como «Dominadas» con **repasos espaciados** (1, 3, 7 y 14 días).
+- **Prueba de nivel** (a partir de 7 años al crear el explorador, o desde el mapa): 5 preguntas por mundo sin ayudas; con 4 aciertos se salta al siguiente mundo y se detiene en el primero que no domine. No regala estrellas: los temas saltados quedan como «Familiar» y vuelven como repasos (5 por día) para confirmar el dominio. Solo sube el progreso, nunca lo baja.
 - **Estrellas** para la tienda (trajes y pegatinas), cofre diario y racha con un congelador semanal. Nunca hay compras con dinero real.
 - **Tiempo de juego**: límite por sesión configurable (10 a 45 min) con pantalla de descanso.
 - **Familias**: el panel y las acciones de adultos están tras una puerta de multiplicar (6 a 9 × 6 a 9). Allí hay progreso por habilidad, últimos errores, copia de seguridad y ajustes.
@@ -58,4 +59,4 @@ Cada `git push` a `main` vuelve a publicar.
 
 ## Pendiente
 
-Mundos 6 a 11 (decimales, geometría, álgebra, funciones…), motor adaptativo de dificultad, prueba diagnóstica inicial, sincronización en la nube con cuenta de familia (hoy el progreso vive en el dispositivo), y migrar el guardado a IndexedDB si crece.
+Mundos 6 a 11 (decimales, geometría, álgebra, funciones…), motor adaptativo de dificultad, sincronización en la nube con cuenta de familia (hoy el progreso vive en el dispositivo), y migrar el guardado a IndexedDB si crece.

@@ -14,7 +14,10 @@ export type Screen =
   | 'result'
   | 'shop'
   | 'parents'
-  | 'sleep';
+  | 'sleep'
+  | 'placement-intro'
+  | 'placement'
+  | 'placement-result';
 
 export interface Feedback {
   correct: boolean;
@@ -50,12 +53,24 @@ export interface GateState {
   error: boolean;
 }
 
+export interface PlacementState {
+  /** Posición en WORLDS del mundo que se está evaluando. */
+  worldIndex: number;
+  session: Session;
+  pick: string | null;
+  phase: 'asking' | 'feedback';
+  scores: number[];
+  /** Mundos superados; solo se conoce cuando la prueba termina. */
+  placed: number | null;
+}
+
 export interface ViewState {
   screen: Screen;
   save: SaveFile;
   profile: Profile | null;
   regionId: string | null;
   play: PlayState | null;
+  placement: PlacementState | null;
   result: ResultState | null;
   gate: GateState | null;
   toast: string | null;

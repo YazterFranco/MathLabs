@@ -236,3 +236,32 @@ export function equipCostume(p: Profile, costumeId: string | null): boolean {
   p.costumeEquipped = costumeId;
   return true;
 }
+
+/* ───────────── Prueba de nivel ───────────── */
+
+/**
+ * Da por superados los primeros `placed` mundos. Solo sube, nunca baja el progreso.
+ * No regala estrellas: cada habilidad queda en «Familiar» y se agenda su repaso (5 habilidades por día)
+ * para confirmar el dominio con evidencia posterior.
+ */
+export function applyPlacement(p: Profile, placed: number, scores: number[], today: DayKey): void {
+  let order = 0;
+  for (const world of WORLDS.slice(0, placed)) {
+    for (const region of world.regions) {
+      const rp = regionProgress(p, region.id);
+      rp.levels = rp.levels.map((l) => Math.max(l, 1));
+      rp.guardianPassed = true;
+      for (const skillId of region.skillIds) {
+        const sp = skillProgress(p, skillId);
+        if (rank(sp.mastery) < rank('familiar')) sp.mastery = 'familiar';
+        if (!sp.nextReview) {
+          sp.reviewStep = 0;
+          sp.nextReview = addDays(today, 1 + Math.floor(order / 5));
+        }
+        order += 1;
+      }
+    }
+  }
+  p.placement = { date: today, placed, scores };
+  registerPlayDay(p, today);
+}

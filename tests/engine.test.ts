@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ALL_REGIONS, GUARDIAN_PASS_COUNT, GUARDIAN_QUESTIONS, QUESTIONS_PER_LEVEL, WORLDS, findRegion } from '../src/data/worlds.ts';
 import { COSTUMES } from '../src/data/shop.ts';
-import { buildGuardianQuestions, buildLevelQuestions, buildReviewQuestions } from '../src/engine/builders.ts';
+import { buildGuardianQuestions, buildLevelQuestions, buildPlacementQuestions, buildReviewQuestions } from '../src/engine/builders.ts';
 import { addDays, daysBetween, weekKey } from '../src/engine/dates.ts';
 import { afterGuardian, afterPractice, afterReview } from '../src/engine/mastery.ts';
 import {
   applyOutcome,
+  applyPlacement,
   buyItem,
   claimChest,
   dueSkills,
@@ -28,6 +29,7 @@ import {
   parseSave,
   persist,
   recordAttempt,
+  regionProgress,
   registerPlayDay,
   skillProgress,
 } from '../src/engine/save.ts';
@@ -410,4 +412,56 @@ test('recordAttempt guarda el intento al instante y marca la habilidad como inte
   recordAttempt(p, 'add10', true, TODAY);
   const s = skillProgress(p, 'add10');
   assert.deepEqual([s.attempts, s.correct, s.mastery, s.last], [2, 1, 'attempted', TODAY]);
+});
+
+/* ───────────── Prueba de nivel ───────────── */
+
+test('prueba de nivel: una pregunta por región de cada mundo, de su propia habilidad', () => {
+  for (const world of WORLDS) {
+    const qs = buildPlacementQuestions(rng(), world);
+    assert.deepEqual(qs.map((q) => q.skillId), world.regions.map((r) => r.skillIds[0]));
+  }
+});
+
+test('prueba de nivel: abre los mundos superados sin regalar estrellas y agenda repasos escalonados', () => {
+  const p = profile();
+  applyPlacement(p, 2, [5, 4, 2], TODAY);
+  assert.equal(isWorldUnlocked(p, 3), true);
+  assert.equal(isWorldUnlocked(p, 4), false);
+  assert.equal(isRegionUnlocked(p, 'w3r1'), true);
+  assert.equal(p.wallet, 0);
+  assert.deepEqual(p.placement, { date: TODAY, placed: 2, scores: [5, 4, 2] });
+  assert.equal(skillProgress(p, 'count10').mastery, 'familiar');
+  assert.equal(skillProgress(p, 'count10').nextReview, addDays(TODAY, 1));
+  assert.equal(skillProgress(p, 'sub10').nextReview, addDays(TODAY, 1)); // 5.ª habilidad
+  assert.equal(skillProgress(p, 'add20').nextReview, addDays(TODAY, 2)); // 6.ª habilidad
+  assert.equal(skillProgress(p, 'add100').mastery, 'none', 'lo no superado no se toca');
+  // El repaso del día siguiente solo trae 5 habilidades, no las 10.
+  assert.equal(dueSkills(p, addDays(TODAY, 1)).length, 5);
+  assert.equal(dueSkills(p, TODAY).length, 0);
+});
+
+test('prueba de nivel: nunca baja el progreso que ya había', () => {
+  const p = profile();
+  completeLevel(p, 'w1r1', 0);
+  completeLevel(p, 'w1r1', 1);
+  const stars = [...regionProgress(p, 'w1r1').levels];
+  passGuardian(p, 'w1r1');
+  const before = skillProgress(p, 'count10');
+  const review = before.nextReview;
+  const mastery = before.mastery;
+  applyPlacement(p, 1, [5], TODAY);
+  assert.equal(skillProgress(p, 'count10').mastery, mastery);
+  assert.equal(skillProgress(p, 'count10').nextReview, review);
+  assert.ok(regionProgress(p, 'w1r1').levels.every((l, i) => l >= (stars[i] ?? 0)));
+});
+
+test('prueba de nivel: se conserva al guardar y se sanea al cargar', () => {
+  const p = profile();
+  applyPlacement(p, 1, [5, 3], TODAY);
+  const save = { ...emptySave(), profiles: [p], activeId: p.id };
+  assert.deepEqual(parseSave(JSON.stringify(save))?.profiles[0]?.placement, p.placement);
+  const broken = JSON.parse(JSON.stringify(save));
+  broken.profiles[0].placement = { placed: 'mucho', date: 3 };
+  assert.equal(parseSave(JSON.stringify(broken))?.profiles[0]?.placement, null);
 });

@@ -6,6 +6,8 @@ export const GUARDIAN_QUESTIONS = 10;
 export const GUARDIAN_PASS_RATIO = 0.85;
 export const GUARDIAN_PASS_COUNT = Math.ceil(GUARDIAN_QUESTIONS * GUARDIAN_PASS_RATIO);
 export const REVIEW_QUESTIONS = 5;
+/** Prueba de nivel: una pregunta por región de cada mundo; con 4 de 5 se pasa al siguiente mundo. */
+export const PLACEMENT_PASS_COUNT = 4;
 
 export interface Region {
   id: string;

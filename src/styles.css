@@ -273,3 +273,4 @@ legend { font-weight: 800; margin-bottom: 6px; padding: 0; }
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
 .upcoming .muted { color: rgba(255, 255, 255, .75); }
+.bullets { display: grid; gap: 8px; margin: 8px 0 16px; padding-left: 1.2em; list-style: disc; }
