@@ -251,6 +251,16 @@ function heartsHtml(n: number): string {
   return Array.from({ length: MAX_HEARTS }, (_, i) => `<span aria-hidden="true">${i < n ? '❤️' : '🖤'}</span>`).join('');
 }
 
+/** Respuesta escrita: una caja numérica grande y un botón. Mantiene lo escrito mientras se corrige. */
+function typedForm(locked: boolean, pick: string | null, state: 'good' | 'bad' | 'neutral' | null): string {
+  const cls = state === 'good' ? 'is-correct' : state === 'bad' ? 'is-wrong' : state === 'neutral' ? 'is-picked' : '';
+  return `<form class="typed" data-form="answer" autocomplete="off">
+    <label class="field" for="typed-input">Escribe tu respuesta</label>
+    <input id="typed-input" name="answer" class="typed-input ${cls}" inputmode="numeric" maxlength="6" value="${esc(pick ?? '')}" placeholder="?" ${locked ? 'disabled' : 'required'} />
+    <button type="submit" class="btn btn-primary btn-xl" ${locked ? 'disabled' : ''}>Responder</button>
+  </form>`;
+}
+
 /** Los grupos se separan con 3 espacios en la pregunta; aquí cada grupo se dibuja en su propia cajita. */
 function visualHtml(visual: string): string {
   const parts = visual.split(/\s{3,}/).filter(Boolean);
@@ -319,7 +329,7 @@ function playQuestion(v: ViewState, play: PlayState): string {
       ? `<ul class="power-bar">${POWERS.filter((k) => play.loadout.has(k))
           .map((k) => {
             const used = s.used.has(k);
-            return `<li><button type="button" class="btn btn-soft btn-small" data-action="use-power" data-id="${k}" ${used || locked ? 'disabled' : ''} aria-label="${POWER_INFO[k].name}: ${POWER_INFO[k].desc}">${POWER_INFO[k].emoji} ${POWER_INFO[k].name}</button></li>`;
+            return `<li><button type="button" class="btn btn-soft btn-small" data-action="use-power" data-id="${k}" ${used || locked || !s.canUse(k) ? 'disabled' : ''} aria-label="${POWER_INFO[k].name}: ${POWER_INFO[k].desc}">${POWER_INFO[k].emoji} ${POWER_INFO[k].name}</button></li>`;
           })
           .join('')}</ul>`
       : '';
@@ -362,7 +372,7 @@ function playQuestion(v: ViewState, play: PlayState): string {
       ${p.settings.voice ? button('speak', '🔊 Escuchar', 'btn-soft btn-small') : ''}
     </section>
     ${powerBar}
-    <ul class="choices">${choices}</ul>
+    ${q.input === 'number' ? typedForm(locked, play.pick, fb ? (fb.neutral ? 'neutral' : fb.correct ? 'good' : 'bad') : null) : `<ul class="choices">${choices}</ul>`}
     ${feedback}${note}
     ${showContinue ? button('continue', 'Seguir', 'btn-primary btn-xl') : ''}
   </main>`;
@@ -587,7 +597,7 @@ function placementQuestion(v: ViewState, pl: PlacementState): string {
       <h2 class="prompt ${q.prompt.length > 34 ? 'is-long' : ''}">${esc(q.prompt)}</h2>
       ${p.settings.voice ? button('speak', '🔊 Escuchar', 'btn-soft btn-small') : ''}
     </section>
-    <ul class="choices">${choices}</ul>
+    ${q.input === 'number' ? typedForm(locked, pl.pick, locked ? 'neutral' : null) : `<ul class="choices">${choices}</ul>`}
     ${locked ? '<p class="feedback neutral" role="status">Respuesta guardada.</p>' : ''}
   </main>`;
 }

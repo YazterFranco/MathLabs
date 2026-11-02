@@ -33,7 +33,8 @@ import {
   registerPlayDay,
   skillProgress,
 } from '../src/engine/save.ts';
-import { Session } from '../src/engine/session.ts';
+import { Session, isCorrect } from '../src/engine/session.ts';
+import { parseNumberInput } from '../src/engine/input.ts';
 
 const TODAY = '2026-11-02'; // lunes
 const rng = () => createRng(2026);
@@ -60,7 +61,7 @@ test('datos: cada región apunta a habilidades que existen y los ids son únicos
   for (const r of ALL_REGIONS) for (const s of r.skillIds) assert.doesNotThrow(() => getSkill(s));
   const used = new Set(ALL_REGIONS.flatMap((r) => r.skillIds));
   for (const s of SKILLS) assert.ok(used.has(s.id), `${s.id} no se usa en ningún mundo`);
-  assert.equal(WORLDS.length, 7);
+  assert.equal(WORLDS.length, 8);
   assert.equal(GUARDIAN_PASS_COUNT, 9);
 });
 
@@ -464,4 +465,38 @@ test('prueba de nivel: se conserva al guardar y se sanea al cargar', () => {
   const broken = JSON.parse(JSON.stringify(save));
   broken.profiles[0].placement = { placed: 'mucho', date: 3 };
   assert.equal(parseSave(JSON.stringify(broken))?.profiles[0]?.placement, null);
+});
+
+/* ───────────── Respuesta escrita ───────────── */
+
+test('respuesta escrita: acepta espacios, el signo menos raro y la coma, y rechaza lo que no es número', () => {
+  const q = { skillId: 'eq1', prompt: 'x', choices: [], answer: '12', input: 'number' as const, hint: 'h', meta: {} };
+  assert.equal(isCorrect(q, '12'), true);
+  assert.equal(isCorrect(q, ' 12 '), true);
+  assert.equal(isCorrect(q, '12,0'), true);
+  assert.equal(isCorrect(q, '13'), false);
+  assert.equal(isCorrect(q, ''), false);
+  assert.equal(isCorrect(q, 'doce'), false);
+  assert.equal(isCorrect(q, '1 2'), true, 'los espacios internos se ignoran');
+  assert.equal(parseNumberInput('−5'), -5);
+  assert.equal(parseNumberInput('3,5'), 3.5);
+  assert.equal(parseNumberInput('abc'), null);
+  assert.equal(parseNumberInput('1e3'), null);
+  const choose = { ...q, input: undefined, choices: ['12', '13'] };
+  assert.equal(isCorrect(choose as never, '12'), true);
+  assert.equal(isCorrect(choose as never, '12.0'), false, 'elegir exige el texto exacto');
+});
+
+test('respuesta escrita: una sesión con preguntas escritas puntúa, usa Pista y no gasta la Lupa', () => {
+  const region = findRegion('w8r3').region;
+  const s = new Session('level', buildLevelQuestions(rng(), region, 2));
+  assert.equal(s.current.input, 'number');
+  assert.deepEqual(s.useLupa(rng()), [], 'no hay opciones que tachar');
+  assert.equal(s.canUse('lupa'), false, 'con respuesta escrita la Lupa no aplica');
+  assert.equal(s.canUse('pista'), true);
+  assert.ok(s.usePista().length > 3);
+  assert.equal(s.answer(` ${s.current.answer} `).correct, true);
+  s.next();
+  assert.equal(s.answer('999').correct, false);
+  assert.equal(s.mistakes, 1);
 });

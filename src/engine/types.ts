@@ -11,8 +11,12 @@ export interface Question {
   prompt: string;
   /** Dibujo en emojis que acompaña a la pregunta. */
   visual?: string;
+  /** Opciones de respuesta; vacío cuando la respuesta se escribe (`input`). */
   choices: string[];
+  /** Respuesta correcta. Si se escribe, es siempre un número entero no negativo. */
   answer: string;
+  /** `number`: el niño escribe la respuesta en vez de elegirla. */
+  input?: 'number';
   /** Pista que ve el niño al fallar (o al usar la Pista mágica). */
   hint: string;
   /** Dificultad con la que se generó (1 a 3). */

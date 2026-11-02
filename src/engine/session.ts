@@ -1,4 +1,5 @@
 import { GUARDIAN_PASS_COUNT, MAX_HEARTS } from '../data/worlds.ts';
+import { parseNumberInput } from './input.ts';
 import type { Rng } from './rng.ts';
 import type { Difficulty, PowerKind, Question } from './types.ts';
 
@@ -38,6 +39,13 @@ export interface Outcome {
 
 /** Genera la pregunta `index` a partir de cómo va respondiendo el niño. */
 export type AdaptFn = (index: number, records: readonly AnswerRecord[]) => Question;
+
+/** Elegir: coincide el texto. Escribir: coincide el número, sin importar espacios ni la coma decimal. */
+export function isCorrect(q: Question, given: string): boolean {
+  if (q.input !== 'number') return given === q.answer;
+  const value = parseNumberInput(given);
+  return value !== null && Math.abs(value - Number(q.answer)) < 1e-9;
+}
 
 export const CHISPA_STREAK = 3;
 export const RAYO_STREAK = 5;
@@ -100,6 +108,7 @@ export class Session {
   }
 
   canUse(kind: PowerKind): boolean {
+    if (kind === 'lupa' && this.current.input === 'number') return false; // no hay opciones que tachar
     return this.allowsPowers && !this.answeredCurrent && !this.finished && !this.used.has(kind);
   }
 
@@ -133,7 +142,7 @@ export class Session {
       return { correct: false, combo: null, finished: this.finished, doubled: false };
     }
     const q = this.current;
-    const correct = choice === q.answer;
+    const correct = isCorrect(q, choice);
     this.records.push({ question: q, chosen: choice, correct });
     this.answeredCurrent = true;
     let combo: ComboEvent = null;

@@ -173,6 +173,48 @@ function solve(q: Question): string {
       const b = n('b');
       return String(m['kind'] === 'lcm' ? (a * b) / g(a, b) : g(a, b));
     }
+    case 'evalExpr': {
+      const xs = /x = (\d+)/.exec(q.prompt);
+      const ys = /y = (\d+)/.exec(q.prompt);
+      const expr = /vale (.+)\?$/.exec(q.prompt)?.[1] as string;
+      const js = expr.replace(/−/g, '-').replace(/(\d)([xy])/g, '$1*$2').replace(/x²/g, 'x**2');
+      assert.match(js, /^[\d\sxy+\-*]+$/, 'expresión segura');
+      return String(Function('x', 'y', `"use strict"; return (${js});`)(Number(xs?.[1]), Number(ys?.[1])));
+    }
+    case 'simplify': {
+      const expr = q.prompt.replace(/ = \?$/, '').replace(/−/g, '-').replace(/\s+/g, '');
+      let A = 0;
+      let B = 0;
+      for (const term of expr.match(/[+-]?\d*x|[+-]?\d+/g) as string[]) {
+        if (term.endsWith('x')) A += Number(term.slice(0, -1).replace(/^([+-]?)$/, '$11'));
+        else B += Number(term);
+      }
+      const coef = A === 1 ? 'x' : `${A}x`;
+      return B === 0 ? coef : `${coef} ${B > 0 ? '+' : '−'} ${Math.abs(B)}`;
+    }
+    case 'eq1': {
+      const [, left] = /^(.+?)\. ¿Cuánto vale x\?$/.exec(q.prompt) as RegExpExecArray;
+      let r: RegExpExecArray | null;
+      if ((r = /^x \+ (\d+) = (\d+)$/.exec(left as string))) return String(Number(r[2]) - Number(r[1]));
+      if ((r = /^x − (\d+) = (\d+)$/.exec(left as string))) return String(Number(r[2]) + Number(r[1]));
+      if ((r = /^(\d+)x = (\d+)$/.exec(left as string))) return String(Number(r[2]) / Number(r[1]));
+      if ((r = /^x ÷ (\d+) = (\d+)$/.exec(left as string))) return String(Number(r[2]) * Number(r[1]));
+      throw new Error(`ecuación desconocida: ${q.prompt}`);
+    }
+    case 'eq2': {
+      let r: RegExpExecArray | null;
+      if ((r = /^(\d+)x \+ (\d+) = (\d+)\./.exec(q.prompt))) return String((Number(r[3]) - Number(r[2])) / Number(r[1]));
+      if ((r = /^(\d+)x − (\d+) = (\d+)\./.exec(q.prompt))) return String((Number(r[3]) + Number(r[2])) / Number(r[1]));
+      if ((r = /^x ÷ (\d+) \+ (\d+) = (\d+)\./.exec(q.prompt))) return String((Number(r[3]) - Number(r[2])) * Number(r[1]));
+      throw new Error(`ecuación desconocida: ${q.prompt}`);
+    }
+    case 'discount': {
+      const r = /\$(\d+) (sube|tiene) (\d+)%/.exec(q.prompt) as RegExpExecArray;
+      const price = Number(r[1]);
+      const amount = (price * Number(r[3])) / 100;
+      assert.ok(Number.isInteger(amount));
+      return String(r[2] === 'sube' ? price + amount : price - amount);
+    }
     default:
       throw new Error(`sin solucionador para ${q.skillId}`);
   }
@@ -191,10 +233,15 @@ for (const skill of SKILLS) {
         const ctx = `${skill.id} d${d} seed${seed}: ${q.prompt}`;
         assert.equal(q.skillId, skill.id, ctx);
         assert.equal(q.answer, solve(q), ctx);
+        assert.ok(q.hint.length > 5, `${ctx} sin pista`);
+        if (q.input === 'number') {
+          assert.deepEqual(q.choices, [], `${ctx} la respuesta escrita no lleva opciones`);
+          assert.match(q.answer, /^\d+$/, `${ctx} la respuesta escrita es un entero no negativo`);
+          continue;
+        }
         assert.ok(q.choices.includes(q.answer), `${ctx} opciones sin respuesta`);
         assert.equal(new Set(q.choices).size, q.choices.length, `${ctx} opciones repetidas`);
         assert.ok(q.choices.length >= 3 && q.choices.length <= 4, `${ctx} cantidad de opciones: ${q.choices.length}`);
-        assert.ok(q.hint.length > 5, `${ctx} sin pista`);
         for (const c of q.choices) assert.ok(!c.startsWith('-') && !c.includes('NaN'), `${ctx} opción inválida ${c}`);
       }
     }
@@ -370,5 +417,26 @@ test('razones: la respuesta es un entero y el nivel 3 siempre pide buscar el val
   for (let seed = 1; seed <= 200; seed++) {
     assert.equal(generateQuestion('ratio', createRng(seed), 3).meta['kind'], 'unit');
     assert.equal(generateQuestion('ratio', createRng(seed), 1).meta['kind'], 'scale');
+  }
+});
+
+test('respuesta escrita: solo el nivel 3 de las ecuaciones y los descuentos; los demás niveles eligen', () => {
+  for (const skill of ['eq1', 'eq2', 'discount']) {
+    for (let seed = 1; seed <= 100; seed++) {
+      assert.equal(generateQuestion(skill, createRng(seed), 3).input, 'number', skill);
+      assert.equal(generateQuestion(skill, createRng(seed), 1).input, undefined, skill);
+      assert.equal(generateQuestion(skill, createRng(seed), 2).input, undefined, skill);
+    }
+  }
+  // La prueba de nivel y los repasos usan dificultad 2: nunca piden escribir.
+});
+
+test('simplificar: las opciones son expresiones distintas y ninguna empieza en 0 ni es negativa', () => {
+  for (const d of DIFFICULTIES) {
+    for (let seed = 1; seed <= 300; seed++) {
+      const q = generateQuestion('simplify', createRng(seed), d);
+      assert.equal(q.choices.length, 4, `${q.prompt}`);
+      assert.ok(q.choices.every((c) => /^[1-9]\d*x|^x/.test(c)), `${q.prompt}: ${q.choices}`);
+    }
   }
 });

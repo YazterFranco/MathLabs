@@ -13,6 +13,7 @@ import {
   isRegionUnlocked,
   type LevelRef,
 } from '../engine/progress.ts';
+import { parseNumberInput } from '../engine/input.ts';
 import { getSkill } from '../engine/questions.ts';
 import { randomRng, type Rng } from '../engine/rng.ts';
 import {
@@ -173,6 +174,12 @@ export class App {
     this.gateThen = then;
   }
 
+  private currentQuestion(): unknown {
+    if (this.screen === 'placement') return this.placement?.session.current;
+    if (this.screen === 'play') return this.play?.session.current;
+    return null;
+  }
+
   private viewState(): ViewState {
     const p = this.profile;
     return {
@@ -195,8 +202,16 @@ export class App {
   private render(): void {
     // Sin perfil activo solo se pueden ver las pantallas de entrada.
     if (!this.profile && !['welcome', 'profiles', 'create'].includes(this.screen)) this.screen = 'welcome';
-    this.root.innerHTML = renderView(this.viewState());
     const doc = this.root.ownerDocument;
+    // Lo escrito en una respuesta sigue ahí si la pantalla se repinta (por ejemplo, al irse un aviso).
+    const old = doc.getElementById('typed-input') as HTMLInputElement | null;
+    const draft = old && !old.disabled ? { question: this.currentQuestion(), value: old.value } : null;
+    this.root.innerHTML = renderView(this.viewState());
+    const typed = doc.getElementById('typed-input') as HTMLInputElement | null;
+    if (typed && !typed.disabled) {
+      if (draft && draft.question === this.currentQuestion()) typed.value = draft.value;
+      if (!this.gate) typed.focus({ preventScroll: true });
+    }
     if (this.gate) {
       (doc.getElementById('gate-input') as HTMLInputElement | null)?.focus();
     } else if (this.lastRenderedScreen !== this.screen) {
@@ -265,12 +280,18 @@ export class App {
       }
     } else if (form.dataset['form'] === 'create') {
       this.createProfile(data);
+    } else if (form.dataset['form'] === 'answer') {
+      const text = String(data.get('answer') ?? '').trim().slice(0, 8);
+      if (parseNumberInput(text) === null) this.showToast('Escribe solo un número.');
+      else if (this.screen === 'placement') this.placementAnswer(text);
+      else this.answer(text);
     }
     this.render();
   }
 
   private onKey(e: KeyboardEvent): void {
     if (this.gate || e.ctrlKey || e.metaKey || e.altKey) return;
+    if ((e.target as Element | null)?.closest?.('input, textarea, select')) return;
     const n = Number(e.key);
     if (this.screen === 'placement') {
       const pl = this.placement;

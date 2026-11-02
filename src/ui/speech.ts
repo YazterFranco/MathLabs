@@ -31,6 +31,7 @@ export function spokenText(prompt: string): string {
     .replace(/cm²/g, ' centímetros cuadrados ')
     .replace(/\bcm\b/g, ' centímetros ')
     .replace(/²/g, ' al cuadrado ')
+    .replace(/(\d)([xy])\b/g, '$1 $2')
     .replace(/\+/g, ' más ')
     .replace(/−/g, ' menos ')
     .replace(/×/g, ' por ')

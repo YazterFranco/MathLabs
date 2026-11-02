@@ -1,6 +1,6 @@
 import { buildChoices } from './choices.ts';
 import type { Rng } from './rng.ts';
-import type { Difficulty, Generator, Question, Skill } from './types.ts';
+import type { Difficulty, Generator, Meta, Question, Skill } from './types.ts';
 
 const OBJECTS = ['🍎', '🐟', '⭐', '🐞', '🍓', '🎈', '🐥', '🌸'];
 
@@ -1010,6 +1010,189 @@ const gcdLcm: Generator = (rng, d) => {
   };
 };
 
+/* ───────────── Mundo 8 · Laboratorio ───────────── */
+
+/** Pregunta de respuesta escrita: sin opciones, la respuesta es un entero no negativo. */
+function typedQuestion(skillId: string, prompt: string, answer: number, hint: string, meta: Meta): Question {
+  return { skillId, prompt, choices: [], input: 'number', answer: String(answer), hint, meta };
+}
+
+const evalExpr: Generator = (rng, d) => {
+  const x = rng.int(2, 9);
+  let prompt: string;
+  let value: number;
+  let a: number;
+  let b: number;
+  let hint: string;
+  if (d === 1) {
+    a = rng.int(2, 6);
+    b = rng.int(1, 9);
+    if (rng.chance(0.5)) {
+      prompt = `Si x = ${x}, ¿cuánto vale ${a}x?`;
+      value = a * x;
+      b = 0;
+    } else {
+      prompt = `Si x = ${x}, ¿cuánto vale x + ${b}?`;
+      value = x + b;
+    }
+    hint = 'Cambia la x por su valor. Un número pegado a la x significa multiplicar: 3x es 3 × x.';
+  } else if (d === 2) {
+    a = rng.int(2, 9);
+    const minus = rng.chance(0.5);
+    b = minus ? rng.int(1, a * x - 1) : rng.int(1, 12);
+    prompt = `Si x = ${x}, ¿cuánto vale ${a}x ${minus ? '−' : '+'} ${b}?`;
+    value = minus ? a * x - b : a * x + b;
+    hint = 'Primero multiplica (el número por la x) y después suma o resta.';
+  } else {
+    const y = rng.int(2, 9);
+    a = rng.int(2, 7);
+    b = rng.int(2, 7);
+    if (rng.chance(0.5)) {
+      prompt = `Si x = ${x} e y = ${y}, ¿cuánto vale ${a}x + ${b}y?`;
+      value = a * x + b * y;
+    } else {
+      prompt = `Si x = ${x}, ¿cuánto vale x² + ${b}?`;
+      value = x * x + b;
+    }
+    hint = 'Cambia cada letra por su número. x² es x × x. Multiplica primero y suma al final.';
+  }
+  const { choices, answer } = buildChoices(rng, value, [value + 1, value - 1, a + x + b, x + b, value + b, value - b], { min: 0, max: 300 });
+  return { skillId: 'evalExpr', prompt, choices, answer, hint, meta: { x, a, b } };
+};
+
+const fmtLin = (a: number, b: number): string => {
+  const coef = a === 1 ? 'x' : `${a}x`;
+  if (b === 0) return coef;
+  return `${coef} ${b > 0 ? '+' : '−'} ${Math.abs(b)}`;
+};
+
+const simplify: Generator = (rng, d) => {
+  let prompt: string;
+  let A: number;
+  let B: number;
+  let wrongs: string[];
+  if (d === 1) {
+    const a = rng.int(2, 9);
+    const b = rng.int(2, 9);
+    A = a + b;
+    B = 0;
+    prompt = `${a}x + ${b}x = ?`;
+    wrongs = [`${A}x²`, `${A + 1}x`, `${A - 1}x`, `${a * b}x`, `${a}x + ${b}`];
+  } else {
+    const [a, b, c, e] = sample<number[]>(
+      () => [rng.int(2, 9), rng.int(1, 9), rng.int(2, 9), rng.int(1, 9)],
+      ([p, , q]) => d === 2 || (p as number) !== (q as number),
+    ) as [number, number, number, number];
+    const signs = d === 2 ? [1, 1, 1] : sample<number[]>(() => [rng.pick([1, -1]), rng.pick([1, -1]), rng.pick([1, -1])], ([, s2, s3]) => (s2 as number) < 0 || (s3 as number) < 0);
+    const [sB, sC, sD] = signs as [number, number, number];
+    A = a + sC * c;
+    B = sB * b + sD * e;
+    if (A < 1) {
+      A = a + c;
+      prompt = `${a}x ${sB < 0 ? '−' : '+'} ${b} + ${c}x ${sD < 0 ? '−' : '+'} ${e} = ?`;
+      B = sB * b + sD * e;
+    } else {
+      prompt = `${a}x ${sB < 0 ? '−' : '+'} ${b} ${sC < 0 ? '−' : '+'} ${c}x ${sD < 0 ? '−' : '+'} ${e} = ?`;
+    }
+    wrongs = [fmtLin(A + 1, B), fmtLin(A - 1, B), fmtLin(A, -B), `${A + B}x`, fmtLin(A, B + 1), fmtLin(A, B - 1)];
+  }
+  const answer = fmtLin(A, B);
+  const picked: string[] = [];
+  for (const w of rng.shuffle(wrongs)) if (picked.length < 3 && w !== answer && !picked.includes(w) && !w.startsWith('0x') && !w.startsWith('-')) picked.push(w);
+  for (let k = 1; picked.length < 3 && k < 20; k++) {
+    const extra = fmtLin(A + k, B);
+    if (extra !== answer && !picked.includes(extra)) picked.push(extra);
+  }
+  return {
+    skillId: 'simplify',
+    prompt,
+    choices: rng.shuffle([answer, ...picked]),
+    answer,
+    hint: 'Junta los términos con x entre sí y los números sueltos entre sí. No se pueden mezclar x con números.',
+    meta: { d },
+  };
+};
+
+const eq1: Generator = (rng, d) => {
+  const kind = d === 1 ? rng.pick(['add', 'sub']) : d === 2 ? rng.pick(['mul', 'div']) : rng.pick(['add', 'sub', 'mul', 'div']);
+  const big = d === 3;
+  const x = rng.int(2, big ? 15 : 10);
+  const a = rng.int(2, big ? 20 : 9);
+  let prompt: string;
+  let wrongs: number[];
+  let hint: string;
+  if (kind === 'add') {
+    prompt = `x + ${a} = ${x + a}. ¿Cuánto vale x?`;
+    wrongs = [x + a + a, x + 1, x - 1, a];
+    hint = `Para dejar sola la x, resta ${a} a los dos lados.`;
+  } else if (kind === 'sub') {
+    prompt = `x − ${a} = ${x}. ¿Cuánto vale x?`;
+    wrongs = [x - a, x + a + 1, x + 1, a];
+    hint = `Para dejar sola la x, suma ${a} a los dos lados.`;
+  } else if (kind === 'mul') {
+    prompt = `${a}x = ${a * x}. ¿Cuánto vale x?`;
+    wrongs = [a * x - a, a * x + a, x + 1, a];
+    hint = `${a}x es ${a} × x. Divide los dos lados entre ${a}.`;
+  } else {
+    prompt = `x ÷ ${a} = ${x}. ¿Cuánto vale x?`;
+    wrongs = [x + a, x - a, x + 1, a];
+    hint = `x se dividió entre ${a}. Multiplica los dos lados por ${a}.`;
+  }
+  const result = kind === 'sub' ? x + a : kind === 'div' ? x * a : x;
+  const meta = { kind, a, x };
+  if (big) return typedQuestion('eq1', prompt, result, hint, meta);
+  const { choices, answer } = buildChoices(rng, result, wrongs, { min: 1, max: 200 });
+  return { skillId: 'eq1', prompt, choices, answer, hint, meta };
+};
+
+const eq2: Generator = (rng, d) => {
+  const kind = d === 1 ? 'add' : rng.pick(d === 2 ? ['add', 'sub', 'div'] : ['add', 'sub', 'div', 'sub']);
+  const x = rng.int(2, d === 3 ? 15 : 9);
+  const a = rng.int(2, d === 3 ? 9 : 5);
+  let b = rng.int(1, d === 3 ? 20 : 12);
+  let prompt: string;
+  let hint: string;
+  let c: number;
+  let xValue = x;
+  if (kind === 'add') {
+    c = a * x + b;
+    prompt = `${a}x + ${b} = ${c}. ¿Cuánto vale x?`;
+    hint = `Primero resta ${b} a los dos lados; luego divide entre ${a}.`;
+  } else if (kind === 'sub') {
+    b = rng.int(1, a * x - 1);
+    c = a * x - b;
+    prompt = `${a}x − ${b} = ${c}. ¿Cuánto vale x?`;
+    hint = `Primero suma ${b} a los dos lados; luego divide entre ${a}.`;
+  } else {
+    xValue = x * a;
+    c = x + b;
+    prompt = `x ÷ ${a} + ${b} = ${c}. ¿Cuánto vale x?`;
+    hint = `Primero resta ${b} a los dos lados; luego multiplica por ${a}.`;
+  }
+  const meta = { kind, a, b, x: xValue };
+  if (d === 3) return typedQuestion('eq2', prompt, xValue, hint, meta);
+  const { choices, answer } = buildChoices(rng, xValue, [c - b, c + b, xValue + 1, xValue - 1, c], { min: 1, max: 300 });
+  return { skillId: 'eq2', prompt, choices, answer, hint, meta };
+};
+
+const discount: Generator = (rng, d) => {
+  const up = d === 3 && rng.chance(0.4);
+  const p = d === 1 ? rng.pick([50, 10]) : d === 2 ? rng.pick([10, 20, 25, 50]) : rng.pick([5, 15, 30, 35, 40, 20, 25]);
+  const price = 20 * rng.int(1, d === 1 ? 5 : d === 2 ? 10 : 15);
+  const amount = (price * p) / 100;
+  const result = up ? price + amount : price - amount;
+  const prompt = up
+    ? `Un artículo de $${price} sube ${p}%. ¿Cuánto cuesta ahora?`
+    : `Un artículo de $${price} tiene ${p}% de descuento. ¿Cuánto cuesta ahora?`;
+  const hint = up
+    ? `Calcula el ${p}% de ${price} y súmalo al precio.`
+    : `Calcula el ${p}% de ${price} y réstalo al precio. Ojo: la pregunta es cuánto se paga, no cuánto se ahorra.`;
+  const meta = { price, p, up: up ? 1 : 0 };
+  if (d === 3) return typedQuestion('discount', prompt, result, hint, meta);
+  const { choices, answer } = buildChoices(rng, result, [amount, up ? price - amount : price + amount, price, result + 5, result - 5], { min: 1, max: 600 });
+  return { skillId: 'discount', prompt, choices, answer, hint, meta };
+};
+
 /* ───────────── Registro ───────────── */
 
 export const SKILLS: Skill[] = [
@@ -1048,6 +1231,11 @@ export const SKILLS: Skill[] = [
   { id: 'integerAdd', name: 'Sumar y restar con signo', emoji: '🔌', tip: 'Signos distintos: resta y deja el signo del mayor. Restar un negativo es sumar.', generate: integerAdd },
   { id: 'orderOps', name: 'Orden de las operaciones', emoji: '🎛️', tip: 'Paréntesis y potencias primero; luego × y ÷; al final + y −.', generate: orderOps },
   { id: 'gcdLcm', name: 'Múltiplos y divisores', emoji: '🔧', tip: 'El mínimo común múltiplo es el primer múltiplo que comparten; el máximo común divisor, el mayor que divide a ambos.', generate: gcdLcm },
+  { id: 'evalExpr', name: 'Expresiones con letras', emoji: '🧪', tip: 'Cambia cada letra por su número; 3x significa 3 × x.', generate: evalExpr },
+  { id: 'simplify', name: 'Simplificar expresiones', emoji: '🧫', tip: 'Junta los términos con x entre sí y los números sueltos entre sí.', generate: simplify },
+  { id: 'eq1', name: 'Ecuaciones de un paso', emoji: '⚖️', tip: 'Haz lo contrario a lo que le pasó a la x, en los dos lados.', generate: eq1 },
+  { id: 'eq2', name: 'Ecuaciones de dos pasos', emoji: '⚗️', tip: 'Primero deshaz la suma o resta; después, la multiplicación o división.', generate: eq2 },
+  { id: 'discount', name: 'Descuentos y aumentos', emoji: '🏷️', tip: 'Calcula el porcentaje y réstalo (descuento) o súmalo (aumento) al precio.', generate: discount },
 ];
 
 const BY_ID = new Map(SKILLS.map((s) => [s.id, s]));

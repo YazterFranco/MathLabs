@@ -15,4 +15,5 @@ test('voz: operaciones y fracciones se leen en español', () => {
   assert.equal(spokenText('−5 + (−8) = ?'), 'menos 5 más menos 8 es igual a ?');
   assert.equal(spokenText('3² + 4 × 2 = ?'), '3 al cuadrado más 4 por 2 es igual a ?');
   assert.equal(spokenText('4 boletos cuestan $12.'), '4 boletos cuestan 12 dólares.');
+  assert.equal(spokenText('3x + 2 = 11. ¿Cuánto vale x?'), '3 x más 2 es igual a 11. ¿Cuánto vale x?');
 });
