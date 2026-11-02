@@ -1,4 +1,5 @@
 import { daysBetween, weekKey, type DayKey } from './dates.ts';
+import { RECENT_WINDOW } from './adaptive.ts';
 import type { Mastery, PowerKind } from './types.ts';
 
 export const SAVE_VERSION = 1;
@@ -16,6 +17,8 @@ export interface SkillProgress {
   last: DayKey | null;
   nextReview: DayKey | null;
   reviewStep: number;
+  /** Últimas respuestas ('1' acierto, '0' error), las más nuevas al final. */
+  recent: string;
 }
 
 export interface EvidenceMiss {
@@ -148,6 +151,7 @@ export function skillProgress(p: Profile, skillId: string): SkillProgress {
     last: null,
     nextReview: null,
     reviewStep: 0,
+    recent: '',
   });
 }
 
@@ -160,6 +164,7 @@ export function recordAttempt(p: Profile, skillId: string, correct: boolean, tod
   const s = skillProgress(p, skillId);
   s.attempts += 1;
   if (correct) s.correct += 1;
+  s.recent = `${s.recent ?? ''}${correct ? '1' : '0'}`.slice(-RECENT_WINDOW);
   s.last = today;
   if (s.mastery === 'none') s.mastery = 'attempted';
 }
@@ -219,6 +224,10 @@ export function parseSave(raw: string): SaveFile | null {
     merged.settings = { ...base.settings, ...(isRecord(item['settings']) ? (item['settings'] as Profile['settings']) : {}) };
     merged.streak = { ...base.streak, ...(isRecord(item['streak']) ? (item['streak'] as Profile['streak']) : {}) };
     merged.skills = isRecord(item['skills']) ? (item['skills'] as Profile['skills']) : {};
+    for (const sp of Object.values(merged.skills)) {
+      // Guardados antiguos no traen `recent`; cualquier valor raro se descarta.
+      sp.recent = typeof sp.recent === 'string' && /^[01]*$/.test(sp.recent) ? sp.recent.slice(-RECENT_WINDOW) : '';
+    }
     merged.regions = isRecord(item['regions']) ? (item['regions'] as Profile['regions']) : {};
     merged.evidence = Array.isArray(item['evidence']) ? (item['evidence'] as EvidenceEntry[]).slice(-MAX_EVIDENCE) : [];
     const pl = item['placement'];

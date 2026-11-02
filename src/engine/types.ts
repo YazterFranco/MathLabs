@@ -15,6 +15,8 @@ export interface Question {
   answer: string;
   /** Pista que ve el niño al fallar (o al usar la Pista mágica). */
   hint: string;
+  /** Dificultad con la que se generó (1 a 3). */
+  difficulty?: Difficulty;
   /** Operandos originales; las pruebas los usan para recalcular la respuesta. */
   meta: Meta;
 }

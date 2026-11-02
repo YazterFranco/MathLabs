@@ -1,6 +1,7 @@
 import { COSTUMES, STICKERS } from '../data/shop.ts';
 import { ALL_REGIONS, LEVELS_PER_REGION, WORLDS, findRegion, type Region } from '../data/worlds.ts';
 import { addDays, type DayKey } from './dates.ts';
+import { recentAccuracy } from './adaptive.ts';
 import { afterGuardian, afterPractice, afterReview, rank } from './mastery.ts';
 import {
   MAX_EVIDENCE,
@@ -64,10 +65,18 @@ export function regionStars(p: Profile, regionId: string): number {
   return regionProgress(p, regionId).levels.reduce((a, b) => a + b, 0);
 }
 
-/** Habilidades con repaso pendiente hoy. */
+/**
+ * Habilidades con repaso pendiente hoy, las que más cuestan primero (menor precisión reciente)
+ * y, a igualdad, las más atrasadas.
+ */
 export function dueSkills(p: Profile, today: DayKey): string[] {
   return Object.entries(p.skills)
     .filter(([, s]) => s.nextReview !== null && s.nextReview <= today && rank(s.mastery) >= rank('familiar'))
+    .sort(([ida, a], [idb, b]) => {
+      const accA = recentAccuracy(a) ?? 0.75;
+      const accB = recentAccuracy(b) ?? 0.75;
+      return accA - accB || String(a.nextReview).localeCompare(String(b.nextReview)) || ida.localeCompare(idb);
+    })
     .map(([id]) => id);
 }
 

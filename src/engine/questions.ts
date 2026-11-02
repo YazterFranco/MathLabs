@@ -859,5 +859,5 @@ export function getSkill(id: string): Skill {
 }
 
 export function generateQuestion(skillId: string, rng: Rng, difficulty: Difficulty): Question {
-  return getSkill(skillId).generate(rng, difficulty);
+  return { ...getSkill(skillId).generate(rng, difficulty), difficulty };
 }

@@ -1,6 +1,6 @@
 import { GUARDIAN_PASS_COUNT, MAX_HEARTS } from '../data/worlds.ts';
 import type { Rng } from './rng.ts';
-import type { PowerKind, Question } from './types.ts';
+import type { Difficulty, PowerKind, Question } from './types.ts';
 
 export type SessionKind = 'level' | 'guardian' | 'review';
 export type ComboEvent = 'chispa' | 'rayo' | null;
@@ -36,6 +36,9 @@ export interface Outcome {
   missed: AnswerRecord[];
 }
 
+/** Genera la pregunta `index` a partir de cómo va respondiendo el niño. */
+export type AdaptFn = (index: number, records: readonly AnswerRecord[]) => Question;
+
 export const CHISPA_STREAK = 3;
 export const RAYO_STREAK = 5;
 
@@ -60,10 +63,14 @@ export class Session {
   chispaBonus = 0;
   lost = false;
   private answeredCurrent = false;
+  /** Dificultad base de un nivel adaptativo (para mostrar «reto extra» cuando sube). */
+  baseDifficulty: Difficulty | null = null;
+  private readonly adapt: AdaptFn | null;
 
-  constructor(kind: SessionKind, questions: Question[]) {
+  constructor(kind: SessionKind, questions: Question[], adapt: AdaptFn | null = null) {
     this.kind = kind;
     this.questions = questions;
+    this.adapt = adapt;
     this.hearts = MAX_HEARTS;
   }
 
@@ -166,6 +173,7 @@ export class Session {
   next(): void {
     if (!this.answeredCurrent || this.finished) return;
     this.index += 1;
+    if (this.adapt) this.questions[this.index] = this.adapt(this.index, this.records);
     this.answeredCurrent = false;
     this.eliminated = new Set();
     this.hintShown = false;

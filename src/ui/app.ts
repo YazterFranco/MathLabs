@@ -1,5 +1,5 @@
 import { findRegion, LEVELS_PER_REGION, PLACEMENT_PASS_COUNT, WORLDS } from '../data/worlds.ts';
-import { buildGuardianQuestions, buildLevelQuestions, buildPlacementQuestions, buildReviewQuestions } from '../engine/builders.ts';
+import { buildAdaptiveLevel, buildGuardianQuestions, buildPlacementQuestions, buildReviewQuestions } from '../engine/builders.ts';
 import { dayKey, type DayKey } from '../engine/dates.ts';
 import {
   applyOutcome,
@@ -23,6 +23,7 @@ import {
   parseSave,
   persist,
   recordAttempt,
+  skillProgress,
   type AgeBand,
   type KeyValueStore,
   type Profile,
@@ -489,8 +490,10 @@ export class App {
     const p = this.profile;
     if (!p || !this.regionId || !isLevelUnlocked(p, this.regionId, level)) return;
     const { region } = findRegion(this.regionId);
-    const qs = buildLevelQuestions(this.rng, region, level);
-    this.startPlay({ kind: 'level', regionId: region.id, level }, new Session('level', qs));
+    const { questions, base, adapt } = buildAdaptiveLevel(this.rng, region, level, skillProgress(p, region.skillIds[0] as string));
+    const session = new Session('level', questions, adapt);
+    session.baseDifficulty = base;
+    this.startPlay({ kind: 'level', regionId: region.id, level }, session);
   }
 
   private startGuardian(): void {

@@ -20,7 +20,8 @@ import {
 } from '../engine/progress.ts';
 import { MASTERY_EMOJI, MASTERY_LABEL } from '../engine/mastery.ts';
 import { getSkill } from '../engine/questions.ts';
-import { MAX_PROFILES, SESSION_LIMITS, regionProgress, skillProgress, type Profile } from '../engine/save.ts';
+import { recentAccuracy, needsSupport } from '../engine/adaptive.ts';
+import { MAX_PROFILES, SESSION_LIMITS, regionProgress, skillProgress, type Profile, type SkillProgress } from '../engine/save.ts';
 import type { PowerKind } from '../engine/types.ts';
 import { esc, shortDate } from './dom.ts';
 import type { PlacementState, PlayState, ResultState, ViewState } from './state.ts';
@@ -355,6 +356,7 @@ function playQuestion(v: ViewState, play: PlayState): string {
       ${status}${streak}
     </header>
     <section class="question card" aria-live="polite">
+      ${s.baseDifficulty && q.difficulty && q.difficulty > s.baseDifficulty ? '<span class="pill bonus">🚀 Reto extra</span>' : ''}
       ${q.visual ? `<p class="visual" aria-label="Dibujo de la pregunta">${visualHtml(q.visual)}</p>` : ''}
       <h2 class="prompt ${q.prompt.length > 34 ? 'is-long' : ''}">${esc(q.prompt)}</h2>
       ${p.settings.voice ? button('speak', '🔊 Escuchar', 'btn-soft btn-small') : ''}
@@ -464,6 +466,12 @@ function shop(v: ViewState): string {
   </main>`;
 }
 
+function recentCell(sp: SkillProgress): string {
+  const acc = recentAccuracy(sp);
+  if (acc === null) return '—';
+  return `${Math.round(acc * 100)}%${needsSupport(sp) ? ' 🔧 refuerzo' : ''}`;
+}
+
 function placementSummary(p: Profile): string {
   const pl = p.placement;
   if (!pl) return '';
@@ -477,13 +485,13 @@ function parents(v: ViewState): string {
   const p = v.profile as Profile;
   const worlds = WORLDS.map(
     (w) => `<h3>${w.emoji} ${esc(w.name)}</h3>
-    <table class="table"><thead><tr><th scope="col">Habilidad</th><th scope="col">Estado</th><th scope="col">Aciertos</th></tr></thead><tbody>
+    <table class="table"><thead><tr><th scope="col">Habilidad</th><th scope="col">Estado</th><th scope="col">Aciertos</th><th scope="col">Últimas</th></tr></thead><tbody>
     ${w.regions
       .map((r) => {
         const sk = getSkill(r.skillIds[0] as string);
         const sp = skillProgress(p, sk.id);
         const pct = sp.attempts ? Math.round((sp.correct / sp.attempts) * 100) : null;
-        return `<tr><th scope="row">${esc(sk.name)}</th><td>${MASTERY_EMOJI[sp.mastery]} ${MASTERY_LABEL[sp.mastery]}</td><td>${pct === null ? '—' : `${pct}% (${sp.correct}/${sp.attempts})`}</td></tr>`;
+        return `<tr><th scope="row">${esc(sk.name)}</th><td>${MASTERY_EMOJI[sp.mastery]} ${MASTERY_LABEL[sp.mastery]}</td><td>${pct === null ? '—' : `${pct}% (${sp.correct}/${sp.attempts})`}</td><td>${recentCell(sp)}</td></tr>`;
       })
       .join('')}
     </tbody></table>`,
@@ -520,7 +528,7 @@ function parents(v: ViewState): string {
       </div>
     </section>
     <section class="card"><h2>Progreso de ${esc(p.nickname)}</h2>
-      <p class="muted">Una habilidad pasa a «Competente» con 100% en un nivel o al vencer al Guardián (${GUARDIAN_PASS_COUNT} de ${GUARDIAN_QUESTIONS}). Se confirma como «Dominada» al repasarla días después.</p>
+      <p class="muted">Una habilidad pasa a «Competente» con 100% en un nivel o al vencer al Guardián (${GUARDIAN_PASS_COUNT} de ${GUARDIAN_QUESTIONS}). Se confirma como «Dominada» al repasarla días después. Los niveles ajustan el reto según las últimas 10 respuestas (🔧 indica que conviene reforzar).</p>
       ${worlds}</section>
     <section class="card"><h2>Últimas pruebas</h2>${placementSummary(p)}${evHtml}</section>
     <section class="card"><h2>Datos</h2>

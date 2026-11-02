@@ -279,3 +279,4 @@ legend { font-weight: 800; margin-bottom: 6px; padding: 0; }
 }
 .upcoming .muted { color: rgba(255, 255, 255, .75); }
 .bullets { display: grid; gap: 8px; margin: 8px 0 16px; padding-left: 1.2em; list-style: disc; }
+.pill.bonus { background: var(--accent); color: var(--accent-ink); }

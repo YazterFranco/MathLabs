@@ -5,7 +5,10 @@ import {
   type Region,
   type World,
 } from '../data/worlds.ts';
+import { nextDifficulty, startDifficulty } from './adaptive.ts';
 import { generateQuestion } from './questions.ts';
+import type { SkillProgress } from './save.ts';
+import type { AdaptFn } from './session.ts';
 import type { Rng } from './rng.ts';
 import type { Difficulty, Question } from './types.ts';
 
@@ -27,13 +30,38 @@ function buildSet(rng: Rng, plan: Array<{ skillId: string; difficulty: Difficult
 }
 
 /** Nivel de práctica: 8 preguntas de la habilidad de la región; la dificultad sube con el nivel. */
-export function buildLevelQuestions(rng: Rng, region: Region, levelIndex: number): Question[] {
-  const difficulty = Math.min(3, levelIndex + 1) as Difficulty;
+export function buildLevelQuestions(rng: Rng, region: Region, levelIndex: number, base?: Difficulty): Question[] {
+  const difficulty = base ?? (Math.min(3, levelIndex + 1) as Difficulty);
   const skillId = region.skillIds[0] as string;
   return buildSet(
     rng,
     Array.from({ length: QUESTIONS_PER_LEVEL }, () => ({ skillId, difficulty })),
   );
+}
+
+/**
+ * Nivel que se ajusta al niño: arranca en la dificultad que le toca según su historial y, tras cada
+ * respuesta, sube o baja un punto como máximo. Devuelve las preguntas de partida y la función de ajuste.
+ */
+export function buildAdaptiveLevel(
+  rng: Rng,
+  region: Region,
+  levelIndex: number,
+  skill?: SkillProgress,
+): { questions: Question[]; base: Difficulty; adapt: AdaptFn } {
+  const base = startDifficulty(levelIndex, skill);
+  const questions = buildLevelQuestions(rng, region, levelIndex, base);
+  const skillId = region.skillIds[0] as string;
+  const seen = new Set(questions.map(keyOf));
+  let current: Difficulty = base;
+  const adapt: AdaptFn = (_index, records) => {
+    current = nextDifficulty(base, current, records.map((r) => r.correct));
+    let q = generateQuestion(skillId, rng, current);
+    for (let tries = 0; tries < 25 && seen.has(keyOf(q)); tries++) q = generateQuestion(skillId, rng, current);
+    seen.add(keyOf(q));
+    return q;
+  };
+  return { questions, base, adapt };
 }
 
 /** Reto del Guardián: 7 preguntas de la región y 3 de repaso de regiones anteriores del mundo. */
@@ -52,7 +80,8 @@ export function buildGuardianQuestions(rng: Rng, world: World, regionIndex: numb
 
 /** Repaso espaciado: reparte las preguntas entre las habilidades que toca repasar. */
 export function buildReviewQuestions(rng: Rng, skillIds: string[]): Question[] {
-  const order = rng.shuffle(skillIds);
+  // El orden importa: las primeras habilidades (las que más cuestan) reciben una pregunta extra.
+  const order = skillIds;
   const plan = Array.from({ length: REVIEW_QUESTIONS }, (_, i) => ({
     skillId: order[i % order.length] as string,
     difficulty: 2 as Difficulty,
