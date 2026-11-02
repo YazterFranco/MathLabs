@@ -63,8 +63,8 @@ Cada `git push` a `main` vuelve a publicar.
 git clone https://github.com/YazterFranco/MathLabs.git && cd MathLabs
 npm install
 npx wrangler login          # abre el navegador para autorizar tu cuenta
-npm run cf:create           # crea el proyecto «mathlabs» en Cloudflare Pages
-npm run deploy              # compila y sube dist/ → https://mathlabs.pages.dev
+npm run cf:create           # crea el proyecto «matemundo» en Cloudflare Pages
+npm run deploy              # compila y sube dist/ → https://matemundo.pages.dev
 ```
 
 Para publicar cambios después: `npm run deploy`.

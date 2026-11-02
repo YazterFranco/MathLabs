@@ -11,8 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test \"tests/**/*.test.ts\"",
     "test:e2e": "node tests/e2e/smoke.mjs && node tests/e2e/placement.mjs && node tests/e2e/typed.mjs && node tests/e2e/worlds-late.mjs",
-    "cf:create": "wrangler pages project create mathlabs --production-branch main",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name mathlabs --branch main"
+    "cf:create": "wrangler pages project create matemundo --production-branch main",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name matemundo --branch main"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
