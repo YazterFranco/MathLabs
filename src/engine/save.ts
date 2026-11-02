@@ -1,5 +1,6 @@
 import { daysBetween, weekKey, type DayKey } from './dates.ts';
 import { RECENT_WINDOW } from './adaptive.ts';
+import { MAX_ENERGY } from '../data/worlds.ts';
 import type { Mastery, PowerKind } from './types.ts';
 
 export const SAVE_VERSION = 1;
@@ -44,6 +45,8 @@ export interface RegionProgress {
   guardianPassed: boolean;
   guardianBest: number;
   guardianTries: number;
+  /** Mejor tiempo (ms de juego activo) de cada nivel; 0 = sin marca. */
+  best: number[];
 }
 
 export interface Placement {
@@ -76,6 +79,11 @@ export interface Profile {
   /** Resultado de la prueba de nivel (una sola vez por explorador). */
   placement: Placement | null;
   settings: { sound: boolean; voice: boolean };
+  /** Energía ⚡ actual y el instante (ms) desde el que corre la recarga automática. */
+  energy: number;
+  energyAt: number;
+  /** Mundos completados (cada uno da una medalla). */
+  medals: number[];
 }
 
 export interface SaveFile {
@@ -140,6 +148,9 @@ export function newProfile(input: NewProfileInput, today: DayKey, id?: string): 
     evidence: [],
     placement: null,
     settings: { sound: true, voice: input.ageBand === '5-6' },
+    energy: MAX_ENERGY,
+    energyAt: 0,
+    medals: [],
   };
 }
 
@@ -156,7 +167,9 @@ export function skillProgress(p: Profile, skillId: string): SkillProgress {
 }
 
 export function regionProgress(p: Profile, regionId: string): RegionProgress {
-  return (p.regions[regionId] ??= { levels: [0, 0, 0], guardianPassed: false, guardianBest: 0, guardianTries: 0 });
+  const rp = (p.regions[regionId] ??= { levels: [0, 0, 0], guardianPassed: false, guardianBest: 0, guardianTries: 0, best: [0, 0, 0] });
+  if (!Array.isArray(rp.best)) rp.best = [0, 0, 0];
+  return rp;
 }
 
 /** Guardado tras cada respuesta: así un cierre brusco no pierde intentos. */
@@ -229,6 +242,20 @@ export function parseSave(raw: string): SaveFile | null {
       sp.recent = typeof sp.recent === 'string' && /^[01]*$/.test(sp.recent) ? sp.recent.slice(-RECENT_WINDOW) : '';
     }
     merged.regions = isRecord(item['regions']) ? (item['regions'] as Profile['regions']) : {};
+    for (const rp of Object.values(merged.regions)) {
+      const best = Array.isArray(rp.best) ? rp.best : [];
+      rp.best = [0, 1, 2].map((i) => {
+        const v = best[i];
+        return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.min(Math.round(v), 3_600_000) : 0;
+      });
+    }
+    const en = Number(item['energy']);
+    merged.energy = item['energy'] === undefined || !Number.isFinite(en) ? MAX_ENERGY : Math.max(0, Math.min(MAX_ENERGY, Math.floor(en)));
+    const at = Number(item['energyAt']);
+    merged.energyAt = Number.isFinite(at) && at > 0 ? at : 0;
+    merged.medals = Array.isArray(item['medals'])
+      ? [...new Set((item['medals'] as unknown[]).filter((x): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 1 && x <= 50))]
+      : [];
     merged.evidence = Array.isArray(item['evidence']) ? (item['evidence'] as EvidenceEntry[]).slice(-MAX_EVIDENCE) : [];
     const pl = item['placement'];
     merged.placement =

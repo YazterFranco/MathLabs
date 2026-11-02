@@ -13,6 +13,8 @@ export type Screen =
   | 'play'
   | 'result'
   | 'shop'
+  | 'energy'
+  | 'world-summary'
   | 'parents'
   | 'sleep'
   | 'placement-intro'
@@ -37,6 +39,10 @@ export interface PlayState {
   feedback: Feedback | null;
   /** Texto de la Pista mágica en la pregunta actual. */
   note: string | null;
+  /** Instante (ms) en que se mostró la pregunta actual; `null` si no hay una esperando respuesta. */
+  qStart: number | null;
+  /** Tiempo meta del nivel en segundos (0 si la partida no se cronometra). */
+  parSec: number;
 }
 
 export interface ResultState {
@@ -44,6 +50,8 @@ export interface ResultState {
   outcome: Outcome;
   reward: Reward;
   tip: string | null;
+  /** Tiempo meta del nivel (segundos); 0 si no se cronometró. */
+  parSec: number;
 }
 
 export interface GateState {
@@ -76,4 +84,7 @@ export interface ViewState {
   toast: string | null;
   today: DayKey;
   dueCount: number;
+  /** Hora actual (ms): la usan el cronómetro y la cuenta atrás de la energía. */
+  nowMs: number;
+  summaryWorldId: number | null;
 }

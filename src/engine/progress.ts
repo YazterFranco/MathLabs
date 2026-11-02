@@ -1,7 +1,8 @@
 import { COSTUMES, STICKERS } from '../data/shop.ts';
-import { ALL_REGIONS, LEVELS_PER_REGION, WORLDS, findRegion, type Region } from '../data/worlds.ts';
+import { ALL_REGIONS, LEVELS_PER_REGION, MAX_ENERGY, WORLDS, WORLD_PRIZE_STARS, findRegion, type Region } from '../data/worlds.ts';
 import { addDays, type DayKey } from './dates.ts';
 import { recentAccuracy } from './adaptive.ts';
+import { adjustEnergy } from './energy.ts';
 import { afterGuardian, afterPractice, afterReview, rank } from './mastery.ts';
 import {
   MAX_EVIDENCE,
@@ -13,6 +14,7 @@ import {
 } from './save.ts';
 import type { Rng } from './rng.ts';
 import type { Outcome } from './session.ts';
+import { SPEED_BONUS, speedTier, type SpeedTier } from './time.ts';
 import type { Mastery, PowerKind } from './types.ts';
 
 /** Días hasta el siguiente repaso: 1, 3, 7 y 14. */
@@ -22,7 +24,9 @@ const POWERS: PowerKind[] = ['lupa', 'pista', 'escudo'];
 export type LevelRef =
   | { kind: 'level'; regionId: string; level: number }
   | { kind: 'guardian'; regionId: string }
-  | { kind: 'review'; skillIds: string[] };
+  | { kind: 'review'; skillIds: string[] }
+  /** «Recargar practicando»: preguntas fáciles que devuelven energía; no cambian el progreso. */
+  | { kind: 'recharge' };
 
 export interface Reward {
   wallet: number;
@@ -31,6 +35,22 @@ export interface Reward {
   regionCompleted: boolean;
   worldCompleted: boolean;
   masteryChanges: Array<{ skillId: string; from: Mastery; to: Mastery }>;
+  /** Energía ⚡ que se ganó con esta partida (ya sumada al perfil). */
+  energyGain: number;
+  /** Bono por terminar rápido (solo niveles). */
+  speed: SpeedTier;
+  /** Tiempo de juego activo del nivel y si mejoró la marca anterior. */
+  activeMs: number;
+  newRecord: boolean;
+  /** Premio por completar el mundo (primera vez que se vence al Guardián de la quinta región). */
+  worldPrize: { stars: number } | null;
+}
+
+/** Datos que el juego mide fuera del motor: tiempo y reloj. */
+export interface OutcomeExtra {
+  activeMs?: number;
+  parSeconds?: number;
+  nowMs?: number;
 }
 
 /* ───────────── Desbloqueos ───────────── */
@@ -80,6 +100,17 @@ export function dueSkills(p: Profile, today: DayKey): string[] {
     .map(([id]) => id);
 }
 
+/**
+ * Habilidades para «Recargar practicando»: las que el niño ya probó en regiones abiertas,
+ * las más recientes primero; si aún no ha probado ninguna, la primera del juego.
+ */
+export function rechargeSkillIds(p: Profile, limit = 5): string[] {
+  const seen = ALL_REGIONS.filter((r) => isRegionUnlocked(p, r.id))
+    .map((r) => r.skillIds[0] as string)
+    .filter((id) => rank(skillProgress(p, id).mastery) >= rank('attempted'));
+  return (seen.length ? seen.slice(-limit) : [ALL_REGIONS[0]?.skillIds[0] as string]).reverse();
+}
+
 /* ───────────── Aplicar resultados ───────────── */
 
 function setMastery(p: Profile, skillId: string, to: Mastery, changes: Reward['masteryChanges']): void {
@@ -110,7 +141,14 @@ export function randomPower(rng: Rng): PowerKind {
  * Aplica el resultado de una partida: estados de dominio, estrellas, recompensas y evidencia.
  * Los intentos por pregunta ya se guardaron al responder (`recordAttempt`).
  */
-export function applyOutcome(p: Profile, ref: LevelRef, outcome: Outcome, rng: Rng, today: DayKey): Reward {
+export function applyOutcome(
+  p: Profile,
+  ref: LevelRef,
+  outcome: Outcome,
+  rng: Rng,
+  today: DayKey,
+  extra: OutcomeExtra = {},
+): Reward {
   const reward: Reward = {
     wallet: 0,
     powerGift: null,
@@ -118,7 +156,13 @@ export function applyOutcome(p: Profile, ref: LevelRef, outcome: Outcome, rng: R
     regionCompleted: false,
     worldCompleted: false,
     masteryChanges: [],
+    energyGain: 0,
+    speed: null,
+    activeMs: 0,
+    newRecord: false,
+    worldPrize: null,
   };
+  const nowMs = extra.nowMs ?? Date.now();
   registerPlayDay(p, today);
 
   if (ref.kind === 'level') {
@@ -134,7 +178,27 @@ export function applyOutcome(p: Profile, ref: LevelRef, outcome: Outcome, rng: R
       reward.chest = true;
       reward.wallet += 3;
       reward.powerGift = randomPower(rng);
+      reward.energyGain += 1;
     }
+    const completed = !outcome.lost && outcome.answered >= outcome.total;
+    if (completed && extra.activeMs !== undefined && extra.activeMs > 0) {
+      const ms = Math.round(extra.activeMs);
+      const prev = rp.best[ref.level] ?? 0;
+      reward.activeMs = ms;
+      if (prev === 0 || ms < prev) {
+        rp.best[ref.level] = ms;
+        reward.newRecord = prev > 0;
+      }
+      reward.speed = speedTier(ms, extra.parSeconds ?? 0, outcome.mistakes, true);
+      if (reward.speed) {
+        const bonus = SPEED_BONUS[reward.speed];
+        reward.wallet += bonus.stars;
+        reward.energyGain += bonus.energy;
+        if (bonus.power) reward.powerGift ??= randomPower(rng);
+      }
+    }
+  } else if (ref.kind === 'recharge') {
+    // La energía se entrega acierto a acierto mientras se practica; aquí solo cuenta como día jugado.
   } else if (ref.kind === 'guardian') {
     const { region, world, index } = findRegion(ref.regionId);
     const main = region.skillIds[0] as string;
@@ -154,6 +218,13 @@ export function applyOutcome(p: Profile, ref: LevelRef, outcome: Outcome, rng: R
       reward.wallet = 10;
       reward.powerGift = 'pista';
       reward.worldCompleted = index === world.regions.length - 1;
+      if (reward.worldCompleted && !p.medals.includes(world.id)) {
+        p.medals.push(world.id);
+        reward.worldPrize = { stars: WORLD_PRIZE_STARS };
+        reward.wallet += WORLD_PRIZE_STARS;
+        for (const k of POWERS) p.inventory[k] += 1;
+        reward.energyGain += MAX_ENERGY;
+      }
     } else if (outcome.passed) {
       reward.wallet = 2;
     }
@@ -199,20 +270,25 @@ export function applyOutcome(p: Profile, ref: LevelRef, outcome: Outcome, rng: R
   p.wallet += reward.wallet;
   p.totalEarned += reward.wallet;
   if (reward.powerGift) p.inventory[reward.powerGift] += 1;
+  if (reward.energyGain > 0) reward.energyGain = adjustEnergy(p, reward.energyGain, nowMs);
   return reward;
 }
 
 /* ───────────── Cofre diario y tienda ───────────── */
 
+export const CHEST_ENERGY = 2;
+
 export interface ChestResult {
   wallet: number;
   power: PowerKind;
+  energy: number;
 }
 
-export function claimChest(p: Profile, today: DayKey, rng: Rng): ChestResult | null {
+export function claimChest(p: Profile, today: DayKey, rng: Rng, nowMs: number = Date.now()): ChestResult | null {
   if (p.chestLastDay === today) return null;
   p.chestLastDay = today;
-  const result: ChestResult = { wallet: 3, power: randomPower(rng) };
+  const result: ChestResult = { wallet: 3, power: randomPower(rng), energy: 0 };
+  result.energy = adjustEnergy(p, CHEST_ENERGY, nowMs);
   p.wallet += result.wallet;
   p.totalEarned += result.wallet;
   p.inventory[result.power] += 1;

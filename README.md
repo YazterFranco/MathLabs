@@ -7,7 +7,11 @@ Juego web de matemáticas para niños, desde preescolar (5 años) hacia secundar
 ## Cómo se juega
 
 - **Mapa**: 11 mundos, 5 regiones cada uno. Cada región tiene 3 niveles de 8 preguntas y un **Reto del Guardián**.
-- **Corazones y combos** (solo en niveles): 3 corazones. Cada 3 aciertos seguidos se activa la **Chispa** (la siguiente vale doble). Cada 5, el **Rayo** devuelve un corazón.
+- **Energía ⚡ y Game Over** (solo en niveles): hay 5 energías que se conservan entre partidas. Cada error gasta una; con 0 es **Game Over**, y la pantalla muestra los errores con su respuesta correcta. No se puede empezar un nivel sin energía: se recarga **practicando** (5 preguntas fáciles, cada acierto devuelve 1 ⚡), esperando (1 ⚡ cada 5 minutos) o con bonos (nivel perfecto +1 ⚡, bono por rapidez +1 ⚡, cofre del día +2 ⚡, completar un mundo = energía llena). El Guardián y los repasos no gastan energía.
+- **Combos**: cada 3 aciertos seguidos se activa la **Chispa** (la siguiente vale doble). Cada 5, el **Rayo** devuelve 1 ⚡.
+- **Cronómetro y bonos por rapidez** (solo en niveles): el reloj cuenta el tiempo que el niño tarda en responder (una pausa larga cuenta 60 s como máximo). La meta depende del mundo (de 15 s por pregunta en el 1 a 40 s en el 11; +10 s por pregunta escrita). Con a lo sumo 1 error: terminar en la meta da el bono **Veloz** (+2 ⭐, +1 ⚡) y en el 60 % de la meta el bono **Rayo** (+4 ⭐, +1 ⚡ y un poder). Se guarda el mejor tiempo de cada nivel. El Guardián no se cronometra.
+- **Resumen y premio del mundo**: al vencer por primera vez al Guardián de la quinta región se gana la medalla del mundo (oro, plata o bronce según las estrellas), +20 ⭐, un poder de cada tipo y la energía llena. El resumen (estrellas, Guardianes, dominio y tiempos) se puede volver a abrir desde el mapa; al terminar el mundo 11 aparece la celebración final.
+- **Inicio**: el botón 🏠 está en el mapa y en cada pantalla; «Continuar como …» entra directo al mapa.
 - **Respuesta escrita**: en el nivel 3 de las habilidades de cálculo (ecuaciones, descuentos, sistemas, funciones, trigonometría, logaritmos, progresiones, conteo, derivadas…), y en sus Guardianes, el niño escribe el resultado en vez de elegirlo (adivinar no sirve). Solo se aceptan números enteros; un texto inválido avisa y no cuenta como intento. La prueba de nivel y los repasos siguen con opciones.
 - **Dificultad adaptativa** (solo en niveles): empieza según el historial de la habilidad (más reto si ya es sólida, más calma si le cuesta). Con 3 aciertos seguidos sube un punto («🚀 Reto extra») y con 2 errores de 3 baja, siempre a ±1 de la dificultad del nivel. El Guardián **no se adapta**: es el examen. Los repasos priorizan lo que más cuesta, y el panel de familias marca con 🔧 las habilidades que conviene reforzar.
 - **Potenciadores**: Lupa (tacha 2 opciones), Pista mágica y Escudo (un error no rompe la racha). Una vez por nivel; se ganan jugando.
@@ -71,4 +75,4 @@ Para publicar cambios después: `npm run deploy`.
 
 ## Pendiente
 
-Sincronización en la nube con cuenta de familia (hoy el progreso vive en el dispositivo), migrar el guardado a IndexedDB si crece, y una pantalla final de celebración al vencer el Guardián de la Cumbre.
+Sincronización en la nube con cuenta de familia (hoy el progreso vive en el dispositivo), migrar el guardado a IndexedDB si crece.

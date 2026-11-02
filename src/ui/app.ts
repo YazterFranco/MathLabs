@@ -1,6 +1,13 @@
-import { findRegion, LEVELS_PER_REGION, PLACEMENT_PASS_COUNT, WORLDS } from '../data/worlds.ts';
-import { buildAdaptiveLevel, buildGuardianQuestions, buildPlacementQuestions, buildReviewQuestions } from '../engine/builders.ts';
+import { findRegion, LEVELS_PER_REGION, MAX_ENERGY, PLACEMENT_PASS_COUNT, WORLDS } from '../data/worlds.ts';
+import {
+  buildAdaptiveLevel,
+  buildGuardianQuestions,
+  buildPlacementQuestions,
+  buildRechargeQuestions,
+  buildReviewQuestions,
+} from '../engine/builders.ts';
 import { dayKey, type DayKey } from '../engine/dates.ts';
+import { adjustEnergy, msToNextEnergy, syncEnergy } from '../engine/energy.ts';
 import {
   applyOutcome,
   applyPlacement,
@@ -11,6 +18,7 @@ import {
   isGuardianUnlocked,
   isLevelUnlocked,
   isRegionUnlocked,
+  rechargeSkillIds,
   type LevelRef,
 } from '../engine/progress.ts';
 import { parseNumberInput } from '../engine/input.ts';
@@ -30,7 +38,8 @@ import {
   type Profile,
   type SaveFile,
 } from '../engine/save.ts';
-import { Session } from '../engine/session.ts';
+import { MAX_THINK_MS, Session } from '../engine/session.ts';
+import { formatClock, liveTier, parSeconds } from '../engine/time.ts';
 import { POWER_INFO } from '../data/shop.ts';
 import type { PowerKind } from '../engine/types.ts';
 import { Sound } from './sound.ts';
@@ -59,6 +68,7 @@ const EXTRA_MS = 10 * 60 * 1000;
 /** Acciones que arrancan o continúan el juego: si ya se pasó el tiempo, llevan a la pantalla de descanso. */
 const GUARDED = new Set([
   'select-profile',
+  'continue-as',
   'open-region',
   'open-level',
   'open-guardian',
@@ -70,6 +80,7 @@ const GUARDED = new Set([
   'back-map',
   'open-shop',
   'begin-placement',
+  'start-recharge',
 ]);
 
 export class App {
@@ -95,6 +106,7 @@ export class App {
   private playedMs = new Map<string, number>();
   private extraMs = new Map<string, number>();
   private lastRenderedScreen: Screen | null = null;
+  private summaryWorldId: number | null = null;
 
   constructor(deps: AppDeps) {
     this.root = deps.root;
@@ -110,6 +122,8 @@ export class App {
     this.root.addEventListener('change', (e) => this.onChange(e));
     this.root.addEventListener('submit', (e) => this.onSubmit(e));
     this.root.ownerDocument.addEventListener('keydown', (e) => this.onKey(e));
+    // Cronómetro del nivel y cuenta atrás de la energía: solo cambian su texto, sin repintar la pantalla.
+    this.root.ownerDocument.defaultView?.setInterval(() => this.tickClocks(), 500);
     this.render();
   }
 
@@ -180,9 +194,42 @@ export class App {
     return null;
   }
 
+  private tickClocks(): void {
+    const p = this.profile;
+    if (!p) return;
+    const nowMs = this.now().getTime();
+    const before = p.energy;
+    syncEnergy(p, nowMs);
+    if (p.energy !== before) {
+      this.save();
+      if (this.screen !== 'play') this.render();
+      return;
+    }
+    for (const el of this.root.querySelectorAll<HTMLElement>('[data-clock]')) {
+      if (el.dataset['clock'] === 'energy') {
+        const left = msToNextEnergy(p, nowMs);
+        el.textContent = left === null ? '' : `+1 ⚡ en ${formatClock(left + 999)}`;
+      } else if (el.dataset['clock'] === 'level' && this.play) {
+        const ms = this.levelElapsed(this.play);
+        el.textContent = `⏱ ${formatClock(ms)}`;
+        el.className = `clock t-${liveTier(ms, this.play.parSec)}`;
+      }
+    }
+  }
+
+  /** Tiempo de juego activo del nivel: lo ya sumado más lo que lleva la pregunta en pantalla. */
+  private levelElapsed(pl: PlayState): number {
+    const running = pl.phase === 'asking' && pl.qStart !== null ? Math.min(MAX_THINK_MS, Math.max(0, this.now().getTime() - pl.qStart)) : 0;
+    return pl.session.activeMs + running;
+  }
+
   private viewState(): ViewState {
     const p = this.profile;
+    const nowMs = this.now().getTime();
+    if (p) syncEnergy(p, nowMs);
     return {
+      nowMs,
+      summaryWorldId: this.summaryWorldId,
       screen: this.screen,
       save: this.saveFile,
       profile: p,
@@ -329,6 +376,31 @@ export class App {
     }
     const id = el.dataset['id'] ?? '';
     switch (action) {
+      case 'go-home':
+        this.clearAdvance();
+        this.speech.stop();
+        this.play = null;
+        this.placement = null;
+        this.regionId = null;
+        this.go('welcome');
+        break;
+      case 'continue-as':
+        this.selectProfile(id);
+        break;
+      case 'open-energy':
+        this.go('energy');
+        break;
+      case 'start-recharge':
+        this.startRecharge();
+        break;
+      case 'open-summary':
+        this.openSummary(Number(id));
+        break;
+      case 'result-summary': {
+        const wid = this.regionId ? findRegion(this.regionId).world.id : null;
+        if (wid !== null) this.openSummary(wid);
+        break;
+      }
       case 'start':
         if (this.saveFile.profiles.length === 0) this.go('create');
         else this.go('profiles');
@@ -351,12 +423,14 @@ export class App {
         this.openRegion(id);
         break;
       case 'back-map':
+      case 'close-summary':
       case 'result-map':
       case 'sleep-map':
         this.clearAdvance();
         this.play = null;
         this.placement = null;
         this.regionId = null;
+        this.summaryWorldId = null;
         this.go(action === 'sleep-map' ? 'welcome' : 'map');
         break;
       case 'open-level':
@@ -498,11 +572,11 @@ export class App {
     this.go('region');
   }
 
-  private startPlay(ref: LevelRef, session: Session): void {
+  private startPlay(ref: LevelRef, session: Session, parSec = 0): void {
     const p = this.profile as Profile;
     this.clearAdvance();
     const loadout = new Set<PowerKind>(session.allowsPowers ? POWERS.filter((k) => p.inventory[k] > 0) : []);
-    this.play = { ref, session, phase: 'intro', loadout, pick: null, feedback: null, note: null };
+    this.play = { ref, session, phase: 'intro', loadout, pick: null, feedback: null, note: null, qStart: null, parSec };
     this.result = null;
     this.go('play');
   }
@@ -510,11 +584,36 @@ export class App {
   private startLevel(level: number): void {
     const p = this.profile;
     if (!p || !this.regionId || !isLevelUnlocked(p, this.regionId, level)) return;
+    syncEnergy(p, this.now().getTime());
+    if (p.energy <= 0) {
+      // Sin energía no se empieza un nivel: se recarga practicando o esperando.
+      this.go('energy');
+      return;
+    }
     const { region } = findRegion(this.regionId);
     const { questions, base, adapt } = buildAdaptiveLevel(this.rng, region, level, skillProgress(p, region.skillIds[0] as string));
-    const session = new Session('level', questions, adapt);
+    const session = new Session('level', questions, adapt, { start: p.energy, max: MAX_ENERGY });
     session.baseDifficulty = base;
-    this.startPlay({ kind: 'level', regionId: region.id, level }, session);
+    this.startPlay({ kind: 'level', regionId: region.id, level }, session, parSeconds(region.id, questions));
+  }
+
+  private startRecharge(): void {
+    const p = this.profile;
+    if (!p) return;
+    syncEnergy(p, this.now().getTime());
+    if (p.energy >= MAX_ENERGY) {
+      this.showToast('¡Ya tienes la energía llena!');
+      return;
+    }
+    const qs = buildRechargeQuestions(this.rng, rechargeSkillIds(p));
+    this.startPlay({ kind: 'recharge' }, new Session('review', qs));
+  }
+
+  private openSummary(worldId: number): void {
+    const p = this.profile;
+    if (!p || !p.medals.includes(worldId)) return;
+    this.summaryWorldId = worldId;
+    this.go('world-summary');
   }
 
   private startGuardian(): void {
@@ -547,6 +646,7 @@ export class App {
     const pl = this.play;
     if (!pl || pl.phase !== 'intro') return;
     pl.phase = 'asking';
+    pl.qStart = this.now().getTime();
     this.speakIfEnabled();
   }
 
@@ -656,9 +756,16 @@ export class App {
     if (!pl || !p || pl.phase !== 'asking') return;
     const s = pl.session;
     const q = s.current;
+    const nowMs = this.now().getTime();
+    if (pl.qStart !== null) s.addTime(nowMs - pl.qStart);
+    pl.qStart = null;
+    const heartsBefore = s.hearts;
     const res = s.answer(choice);
     // Cada intento se guarda al momento: un cierre brusco no pierde nada.
     recordAttempt(p, q.skillId, res.correct, this.today);
+    // La energía es del niño y se conserva entre partidas: cada error gasta una y cada Rayo devuelve una.
+    if (s.usesHearts && s.hearts !== heartsBefore) adjustEnergy(p, s.hearts - heartsBefore, nowMs);
+    if (pl.ref.kind === 'recharge' && res.correct) adjustEnergy(p, 1, nowMs);
     this.save();
     const neutral = s.kind === 'guardian';
     pl.pick = choice;
@@ -690,6 +797,7 @@ export class App {
     pl.pick = null;
     pl.feedback = null;
     pl.note = null;
+    pl.qStart = this.now().getTime();
     this.speakIfEnabled();
   }
 
@@ -699,16 +807,26 @@ export class App {
     if (!pl || !p) return;
     this.speech.stop();
     const outcome = pl.session.outcome();
-    const reward = applyOutcome(p, pl.ref, outcome, this.rng, this.today);
+    const reward = applyOutcome(p, pl.ref, outcome, this.rng, this.today, {
+      activeMs: outcome.activeMs,
+      parSeconds: pl.parSec,
+      nowMs: this.now().getTime(),
+    });
     this.save();
     let tip: string | null = null;
-    if (pl.ref.kind !== 'review') {
+    if (pl.ref.kind === 'level' || pl.ref.kind === 'guardian') {
       const needsTip = outcome.lost || (pl.ref.kind === 'guardian' && !outcome.passed) || outcome.mistakes >= 3;
       if (needsTip) tip = getSkill(findRegion(pl.ref.regionId).region.skillIds[0] as string).tip;
       this.regionId = pl.ref.regionId;
     }
-    this.result = { ref: pl.ref, outcome, reward, tip };
-    this.sound.play(outcome.lost || (pl.ref.kind === 'guardian' && !outcome.passed) ? 'lose' : reward.chest || reward.regionCompleted ? 'chest' : 'win');
+    this.result = { ref: pl.ref, outcome, reward, tip, parSec: pl.parSec };
+    this.sound.play(
+      outcome.lost || (pl.ref.kind === 'guardian' && !outcome.passed)
+        ? 'lose'
+        : reward.chest || reward.regionCompleted || reward.speed
+          ? 'chest'
+          : 'win',
+    );
     this.go('result');
   }
 
@@ -717,10 +835,10 @@ export class App {
     this.speech.stop();
     const ref = this.play?.ref;
     this.play = null;
-    if (ref && ref.kind !== 'review') {
+    if (ref && (ref.kind === 'level' || ref.kind === 'guardian')) {
       this.regionId = ref.regionId;
       this.go('region');
-    } else this.go('map');
+    } else this.go(ref?.kind === 'recharge' && this.regionId ? 'region' : 'map');
   }
 
   private resultNext(): void {
@@ -758,11 +876,12 @@ export class App {
   private openChest(): void {
     const p = this.profile;
     if (!p) return;
-    const res = claimChest(p, this.today, this.rng);
+    const res = claimChest(p, this.today, this.rng, this.now().getTime());
     if (!res) return;
     this.sound.play('chest');
     this.save();
-    this.showToast(`🎁 ¡+${res.wallet} ⭐ y un poder: ${POWER_INFO[res.power].name}!`);
+    const energy = res.energy > 0 ? `, +${res.energy} ⚡` : '';
+    this.showToast(`🎁 ¡+${res.wallet} ⭐${energy} y un poder: ${POWER_INFO[res.power].name}!`);
   }
 
   private exportSave(): void {

@@ -1,6 +1,7 @@
 import {
   GUARDIAN_QUESTIONS,
   QUESTIONS_PER_LEVEL,
+  RECHARGE_QUESTIONS,
   REVIEW_QUESTIONS,
   type Region,
   type World,
@@ -92,4 +93,16 @@ export function buildReviewQuestions(rng: Rng, skillIds: string[]): Question[] {
 /** Prueba de nivel de un mundo: una pregunta de dificultad media por cada región, sin ayudas. */
 export function buildPlacementQuestions(rng: Rng, world: World): Question[] {
   return world.regions.map((r) => generateQuestion(r.skillIds[0] as string, rng, 2));
+}
+
+/** «Recargar practicando»: preguntas fáciles (dificultad 1) de lo que el niño ya conoce, mezcladas. */
+export function buildRechargeQuestions(rng: Rng, skillIds: string[], count: number = RECHARGE_QUESTIONS): Question[] {
+  const pool = skillIds.length ? skillIds : ['count10'];
+  const plan: Array<{ skillId: string; difficulty: Difficulty }> = [];
+  let bag: string[] = [];
+  for (let i = 0; i < count; i++) {
+    if (!bag.length) bag = rng.shuffle([...pool]);
+    plan.push({ skillId: bag.pop() as string, difficulty: 1 });
+  }
+  return buildSet(rng, plan);
 }

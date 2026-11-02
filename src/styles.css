@@ -123,7 +123,14 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .topbar-title { flex: 1; font-size: 1.1rem; margin: 0; text-align: center; }
 .who { flex: 1; font-size: 1.1rem; }
 .wallet, .streak { background: rgba(0, 0, 0, .25); border-radius: 99px; padding: 6px 14px; font-weight: 800; white-space: nowrap; }
-.hearts { letter-spacing: 2px; white-space: nowrap; }
+.hearts { white-space: nowrap; display: inline-flex; gap: 1px; }
+.who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar .btn-small { min-height: 44px; padding-inline: 8px; }
+.topbar .btn-icon.btn-ghost { text-decoration: none; }
+.map-bar { flex-wrap: wrap; gap: 8px 12px; }
+.map-bar .who { flex: 1 1 80px; }
+.chips { display: flex; gap: 8px; margin-left: auto; }
+.card.center .muted { margin-top: 4px; }
 .combo { background: var(--accent); color: var(--accent-ink); border-radius: 99px; padding: 4px 10px; font-weight: 800; animation: pop .3s ease; }
 .progress { flex: 1; height: 16px; background: rgba(0, 0, 0, .3); border-radius: 99px; overflow: hidden; }
 .progress span { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .3s ease; }
@@ -277,6 +284,41 @@ legend { font-weight: 800; margin-bottom: 6px; padding: 0; }
 @keyframes pop { 0% { transform: scale(.6); opacity: 0; } 70% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
 @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+/* ── Energía, cronómetro y premios ── */
+.en { font-size: 1.1rem; line-height: 1; }
+.en.off { opacity: .28; filter: grayscale(1); }
+.energy-icons { display: inline-flex; gap: 4px; }
+.energy-icons.big .en { font-size: 2.2rem; }
+.energy-chip { border: 0; font: inherit; font-weight: 800; color: #fff; background: rgba(0, 0, 0, .25); border-radius: 99px; padding: 6px 12px; min-height: 44px; cursor: pointer; white-space: nowrap; }
+.energy-chip:hover { background: rgba(0, 0, 0, .4); }
+.energy-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: #fff; }
+.energy-bar .muted { color: rgba(255, 255, 255, .85); }
+.energy-panel { display: grid; gap: 6px; justify-items: center; padding: 10px 14px; border-radius: 16px; background: var(--soft); width: 100%; }
+.energy-panel .en { font-size: 1.8rem; }
+.clock { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; border-radius: 99px; padding: 4px 10px; background: rgba(0, 0, 0, .3); color: #fff; }
+.clock.t-rayo { background: #1f9d63; }
+.clock.t-veloz { background: var(--accent); color: var(--accent-ink); }
+.level-time { font-size: .75rem; font-weight: 700; color: var(--ink-soft); }
+.goal { background: #fff7d6; border-radius: 14px; padding: 10px 14px; }
+.bonus-line { color: var(--good); }
+.prize { background: #fff7d6; border: 3px solid var(--accent); border-radius: var(--radius); padding: 14px 16px; width: 100%; }
+.prize-title { font-size: 1.3rem; font-weight: 800; margin: 0 0 4px; }
+.is-gameover .card.center { border: 4px solid var(--bad); }
+.is-gameover h1 { color: var(--bad); }
+.missed-card { border: 3px solid var(--bad-bg); }
+.ways { display: grid; gap: 8px; font-weight: 700; padding-left: 0; list-style: none; }
+.medal { font-size: 5.5rem; line-height: 1; margin: 0; animation: pop .6s ease backwards; }
+.sum-totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; padding: 0; list-style: none; }
+.sum-totals li { display: grid; gap: 2px; background: var(--soft); border-radius: 16px; padding: 10px 6px; }
+.sum-totals strong { font-size: 1.25rem; }
+.sum-totals span { font-size: .8rem; color: var(--ink-soft); }
+.sum-list { display: grid; gap: 10px; padding: 0; list-style: none; }
+.sum-list li { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; align-items: center; padding-bottom: 8px; border-bottom: 2px solid var(--soft); }
+.sum-list li:last-child { border-bottom: 0; }
+.sum-emoji { grid-row: span 3; font-size: 1.8rem; }
+.sum-name { font-weight: 800; }
+.sum-stats, .sum-mastery { font-size: .88rem; color: var(--ink-soft); }
 
 @media (max-width: 380px) {
   body { font-size: 17px; }

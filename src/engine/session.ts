@@ -33,6 +33,7 @@ export interface Outcome {
   passed: boolean;
   chispaBonus: number;
   bestStreak: number;
+  activeMs: number;
   bySkill: Record<string, { correct: number; total: number }>;
   missed: AnswerRecord[];
 }
@@ -47,6 +48,8 @@ export function isCorrect(q: Question, given: string): boolean {
   return value !== null && Math.abs(value - Number(q.answer)) < 1e-9;
 }
 
+/** Una pregunta no suma más de 60 s: si el niño se distrae, no pierde el bono por eso. */
+export const MAX_THINK_MS = 60_000;
 export const CHISPA_STREAK = 3;
 export const RAYO_STREAK = 5;
 
@@ -59,6 +62,10 @@ export class Session {
   readonly questions: Question[];
   index = 0;
   hearts: number;
+  /** Tope de vidas: 3 por defecto; en el juego son las energías ⚡ del niño. */
+  readonly maxHearts: number;
+  /** Milisegundos de juego activo (el tiempo que el niño tarda en cada pregunta). */
+  activeMs = 0;
   streak = 0;
   bestStreak = 0;
   readonly records: AnswerRecord[] = [];
@@ -75,11 +82,17 @@ export class Session {
   baseDifficulty: Difficulty | null = null;
   private readonly adapt: AdaptFn | null;
 
-  constructor(kind: SessionKind, questions: Question[], adapt: AdaptFn | null = null) {
+  constructor(kind: SessionKind, questions: Question[], adapt: AdaptFn | null = null, lives?: { start: number; max: number }) {
     this.kind = kind;
     this.questions = questions;
     this.adapt = adapt;
-    this.hearts = MAX_HEARTS;
+    this.maxHearts = lives?.max ?? MAX_HEARTS;
+    this.hearts = Math.max(1, Math.min(this.maxHearts, lives?.start ?? this.maxHearts));
+  }
+
+  /** Suma tiempo de reflexión de una pregunta; una pausa larga no cuenta de más. */
+  addTime(ms: number): void {
+    if (Number.isFinite(ms) && ms > 0) this.activeMs += Math.min(ms, MAX_THINK_MS);
   }
 
   get current(): Question {
@@ -159,7 +172,7 @@ export class Session {
       if (this.usesHearts) {
         // El Rayo (cada 5 seguidas) tiene prioridad sobre la Chispa (cada 3 seguidas).
         if (this.streak % RAYO_STREAK === 0) {
-          this.hearts = Math.min(MAX_HEARTS, this.hearts + 1);
+          this.hearts = Math.min(this.maxHearts, this.hearts + 1);
           combo = 'rayo';
         } else if (this.streak % CHISPA_STREAK === 0) {
           this.chispaArmed = true;
@@ -213,6 +226,7 @@ export class Session {
       passed: this.kind === 'guardian' && completed && correct >= GUARDIAN_PASS_COUNT,
       chispaBonus: this.chispaBonus,
       bestStreak: this.bestStreak,
+      activeMs: this.activeMs,
       bySkill,
       missed: this.records.filter((r) => !r.correct),
     };

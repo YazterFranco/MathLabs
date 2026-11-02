@@ -1,6 +1,19 @@
 export const LEVELS_PER_REGION = 3;
 export const QUESTIONS_PER_LEVEL = 8;
 export const MAX_HEARTS = 3;
+/** Energía ⚡ que se conserva entre partidas: cada error en un nivel gasta una; con 0 es Game Over. */
+export const MAX_ENERGY = 5;
+/** Una energía se recupera sola cada 5 minutos. */
+export const ENERGY_REGEN_MS = 5 * 60 * 1000;
+/** «Recargar practicando»: preguntas fáciles; cada acierto devuelve una energía. */
+export const RECHARGE_QUESTIONS = 5;
+/** Segundos de «meta» por pregunta en cada mundo (1 a 11); las de escribir suman `TYPED_EXTRA_SECONDS`. */
+export const PAR_SECONDS_PER_QUESTION = [15, 15, 15, 15, 20, 20, 25, 25, 35, 35, 40] as const;
+export const TYPED_EXTRA_SECONDS = 10;
+/** Con el 60 % del tiempo meta o menos el bono es Rayo; con la meta o menos, Veloz. */
+export const RAYO_TIME_RATIO = 0.6;
+/** Premio de completar un mundo (además del de la región). */
+export const WORLD_PRIZE_STARS = 20;
 export const GUARDIAN_QUESTIONS = 10;
 /** 85 % de aciertos para aprobar: con 10 preguntas son 9. */
 export const GUARDIAN_PASS_RATIO = 0.85;

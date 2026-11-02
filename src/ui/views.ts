@@ -4,8 +4,11 @@ import {
   GUARDIAN_QUESTIONS,
   LEVELS_PER_REGION,
   PLACEMENT_PASS_COUNT,
-  MAX_HEARTS,
+  MAX_ENERGY,
+  RAYO_TIME_RATIO,
+  RECHARGE_QUESTIONS,
   UPCOMING_WORLDS,
+  WORLD_PRIZE_STARS,
   WORLDS,
   findRegion,
   type Region,
@@ -18,7 +21,11 @@ import {
   isWorldUnlocked,
   regionStars,
 } from '../engine/progress.ts';
+import { msToNextEnergy } from '../engine/energy.ts';
 import { MASTERY_EMOJI, MASTERY_LABEL } from '../engine/mastery.ts';
+import { MEDAL_EMOJI, MEDAL_NAME, worldSummary } from '../engine/summary.ts';
+import { CHEST_ENERGY } from '../engine/progress.ts';
+import { SPEED_BONUS, formatClock, liveTier } from '../engine/time.ts';
 import { getSkill } from '../engine/questions.ts';
 import { recentAccuracy, needsSupport } from '../engine/adaptive.ts';
 import { MAX_PROFILES, SESSION_LIMITS, regionProgress, skillProgress, type Profile, type SkillProgress } from '../engine/save.ts';
@@ -38,6 +45,15 @@ const stars = (earned: number, max = 3): string =>
 
 const starsLabel = (earned: number, max = 3): string => `${earned} de ${max} estrellas`;
 
+const energyIcons = (n: number, max: number = MAX_ENERGY): string =>
+  Array.from({ length: max }, (_, i) => `<span class="en ${i < n ? 'on' : 'off'}" aria-hidden="true">⚡</span>`).join('');
+
+/** «+1 ⚡ en 3:12»; vacío si la energía está llena. Se actualiza sola cada medio segundo. */
+function energyCountdown(p: Profile, nowMs: number): string {
+  const left = msToNextEnergy(p, nowMs);
+  return `<span class="muted" data-clock="energy">${left === null ? '' : `+1 ⚡ en ${formatClock(left + 999)}`}</span>`;
+}
+
 function mascotStage(p: Profile): { name: string; scale: number } {
   let stage: { name: string; scale: number } = MASCOT_STAGES[0];
   for (const s of MASCOT_STAGES) if (p.totalEarned >= s.min) stage = s;
@@ -55,6 +71,7 @@ function topBar(p: Profile, title: string, back?: { action: string; label: strin
   return `<header class="topbar">
     ${back ? button(back.action, `← ${esc(back.label)}`, 'btn-ghost') : `<span class="who">${esc(p.avatar)} <strong>${esc(p.nickname)}</strong></span>`}
     <h1 class="topbar-title">${esc(title)}</h1>
+    ${button('go-home', '🏠', 'btn-ghost btn-icon', 'aria-label="Ir al inicio" title="Inicio"')}
     <span class="wallet" aria-label="${p.wallet} estrellas para gastar">⭐ ${p.wallet}</span>
   </header>`;
 }
@@ -89,7 +106,12 @@ function welcome(v: ViewState): string {
     <div class="logo" aria-hidden="true">🧮</div>
     <h1 class="brand">Matemundo</h1>
     <p class="lead">Explora mundos, vence a los Guardianes y domina las mates paso a paso.</p>
-    ${button('start', '¡Jugar!', 'btn-primary btn-xl')}
+    ${
+      v.profile
+        ? `${button('continue-as', `Continuar como ${esc(v.profile.avatar)} ${esc(v.profile.nickname)}`, 'btn-primary btn-xl', `data-id="${esc(v.profile.id)}"`)}
+           ${button('start', 'Cambiar de explorador', 'btn-ghost')}`
+        : button('start', '¡Jugar!', 'btn-primary btn-xl')
+    }
     <ul class="promises">
       <li>Sin anuncios ni compras con dinero real</li>
       <li>Tu progreso se guarda solo en este dispositivo</li>
@@ -174,6 +196,7 @@ function worldBlock(p: Profile, world: World): string {
   return `<section class="world" data-theme="${world.theme}" aria-label="${esc(world.name)}">
     <h2><span aria-hidden="true">${world.emoji}</span> ${esc(world.name)}</h2>
     <p class="muted">${esc(world.grade)} · ${esc(world.ages)}</p>
+    ${p.medals.includes(world.id) ? button('open-summary', `${MEDAL_EMOJI[worldSummary(p, world.id).tier]} Ver resumen del mundo`, 'btn-soft btn-small', `data-id="${world.id}"`) : ''}
     ${open ? `<ol class="trail">${world.regions.map((r) => regionNode(p, r)).join('')}</ol>` : '<p class="locked-note">🔒 Vence al Guardián del mundo anterior para entrar.</p>'}
   </section>`;
 }
@@ -185,10 +208,14 @@ function map(v: ViewState): string {
     (w) => `<li><span aria-hidden="true">${w.emoji}</span> ${esc(w.name)} <span class="muted">${esc(w.grade)}</span></li>`,
   ).join('');
   return `<main class="screen map">
-    <header class="topbar">
+    <header class="topbar map-bar">
+      ${button('go-home', '🏠 Inicio', 'btn-ghost btn-small', 'aria-label="Volver al inicio"')}
       <span class="who">${esc(p.avatar)} <strong>${esc(p.nickname)}</strong></span>
-      <span class="streak" aria-label="Racha de ${p.streak.days} días">🔥 ${p.streak.days}</span>
-      <span class="wallet" aria-label="${p.wallet} estrellas">⭐ ${p.wallet}</span>
+      <span class="chips">
+        <button type="button" class="energy-chip" data-action="open-energy" aria-label="Energía: ${p.energy} de ${MAX_ENERGY}. Abrir recarga">⚡ ${p.energy}/${MAX_ENERGY}</button>
+        <span class="streak" aria-label="Racha de ${p.streak.days} días">🔥 ${p.streak.days}</span>
+        <span class="wallet" aria-label="${p.wallet} estrellas">⭐ ${p.wallet}</span>
+      </span>
     </header>
     <section class="hero-card">
       ${mascot(p, true)}
@@ -206,7 +233,10 @@ function map(v: ViewState): string {
     </div>
     ${WORLDS.map((w) => worldBlock(p, w)).join('')}
     ${timeline ? `<section class="upcoming"><h2>Próximamente</h2><ul>${timeline}</ul></section>` : ''}
-    ${button('switch-profile', 'Cambiar de explorador', 'btn-ghost')}
+    <div class="actions">
+      ${button('go-home', '🏠 Ir al inicio', 'btn-soft')}
+      ${button('switch-profile', 'Cambiar de explorador', 'btn-ghost')}
+    </div>
   </main>`;
 }
 
@@ -222,7 +252,7 @@ function regionScreen(v: ViewState): string {
     return `<li>${
       open
         ? `<button type="button" class="level-btn" data-action="open-level" data-level="${i}" aria-label="Nivel ${i + 1}, ${starsLabel(got)}">
-            <span class="level-num">${i + 1}</span><span class="level-stars">${stars(got)}</span></button>`
+            <span class="level-num">${i + 1}</span><span class="level-stars">${stars(got)}</span>${(rp.best[i] ?? 0) > 0 ? `<span class="level-time">⏱ ${formatClock(rp.best[i] as number)}</span>` : ''}</button>`
         : `<button type="button" class="level-btn" disabled aria-label="Nivel ${i + 1} bloqueado"><span class="level-num">🔒</span></button>`
     }</li>`;
   }).join('');
@@ -237,6 +267,11 @@ function regionScreen(v: ViewState): string {
       <p>${esc(skill.tip)}</p>
     </section>
     <h2>Niveles</h2>
+    <section class="energy-bar" aria-label="Energía">
+      <span class="energy-icons">${energyIcons(p.energy)}</span>
+      ${energyCountdown(p, v.nowMs)}
+      ${p.energy <= 0 ? button('open-energy', '🔋 Recargar', 'btn-gold btn-small') : ''}
+    </section>
     <ol class="levels">${levels}</ol>
     <section class="card guardian ${guardianOpen ? '' : 'is-locked'}">
       <h2>🛡️ Reto del Guardián</h2>
@@ -247,9 +282,6 @@ function regionScreen(v: ViewState): string {
   </main>`;
 }
 
-function heartsHtml(n: number): string {
-  return Array.from({ length: MAX_HEARTS }, (_, i) => `<span aria-hidden="true">${i < n ? '❤️' : '🖤'}</span>`).join('');
-}
 
 /** Respuesta escrita: una caja numérica grande y un botón. Mantiene lo escrito mientras se corrige. */
 function typedForm(locked: boolean, pick: string | null, state: 'good' | 'bad' | 'neutral' | null): string {
@@ -272,6 +304,7 @@ function playTitle(play: PlayState): string {
   const ref = play.ref;
   if (ref.kind === 'level') return `${findRegion(ref.regionId).region.name} · Nivel ${ref.level + 1}`;
   if (ref.kind === 'guardian') return `Reto del Guardián`;
+  if (ref.kind === 'recharge') return 'Recargar energía';
   return 'Repaso';
 }
 
@@ -290,11 +323,17 @@ function playIntro(v: ViewState, play: PlayState): string {
         <span class="power-desc">${POWER_INFO[k].desc}</span>
         <span class="power-count">x${have}</span></button></li>`;
     }).join('');
-    body = `<p>${s.total} preguntas y ${MAX_HEARTS} corazones. Elige los poderes que quieres llevar: se gastan solo si los usas.</p>
+    const par = play.parSec;
+    body = `<p>${s.total} preguntas. Cada error gasta 1 ⚡ de energía y ahora tienes <strong>${s.hearts}</strong>: si llegas a 0 es Game Over.</p>
+      <p class="goal">⏱ Termina en <strong>${formatClock(par * 1000)}</strong> o menos y gana ⭐ y ⚡ extra; en <strong>${formatClock(par * RAYO_TIME_RATIO * 1000)}</strong> o menos, ¡el bono Rayo! (con 1 error como máximo)</p>
+      <p class="muted">Elige los poderes que quieres llevar: se gastan solo si los usas.</p>
       <ul class="powers">${picks}</ul>`;
   } else if (ref.kind === 'guardian') {
     body = `<p>${s.total} preguntas. Aquí no hay poderes ni corazones: demuestra lo que sabes. Con ${GUARDIAN_PASS_COUNT} aciertos pasas.</p>
       <p class="muted">Si no pasas, no pasa nada: practicas y vuelves a intentarlo.</p>`;
+  } else if (ref.kind === 'recharge') {
+    body = `<p>${s.total} preguntas fáciles de lo que ya conoces. Cada acierto te devuelve <strong>1 ⚡</strong>. Sin prisa y sin perder energía.</p>
+      <p class="muted">Ahora tienes ${p.energy} de ${MAX_ENERGY}.</p>`;
   } else {
     body = `<p>${s.total} preguntas para recordar lo que ya aprendiste. Cada acierto vale ⭐.</p>`;
   }
@@ -340,7 +379,7 @@ function playQuestion(v: ViewState, play: PlayState): string {
     else if (fb.correct) {
       const extra =
         fb.combo === 'rayo'
-          ? ' ⚡ ¡Rayo! Recuperas un corazón.'
+          ? ' ⚡ ¡Rayo! Recuperas 1 ⚡ de energía.'
           : fb.combo === 'chispa'
             ? ' ✨ ¡Chispa! La próxima vale doble.'
             : fb.doubled
@@ -354,16 +393,20 @@ function playQuestion(v: ViewState, play: PlayState): string {
   const note = play.note && !fb ? `<p class="feedback note" role="status">💡 ${esc(play.note)}</p>` : '';
   const showContinue = play.phase === 'feedback' && fb?.explain;
 
+  const isRecharge = play.ref.kind === 'recharge';
   const status = s.usesHearts
-    ? `<span class="hearts" aria-label="${s.hearts} corazones">${heartsHtml(s.hearts)}</span>`
-    : `<span class="muted">Sin ayudas</span>`;
+    ? `<span class="hearts" aria-label="${s.hearts} de ${s.maxHearts} energías">${energyIcons(s.hearts, s.maxHearts)}</span>`
+    : isRecharge
+      ? `<span class="hearts" aria-label="${p.energy} de ${MAX_ENERGY} energías">${energyIcons(p.energy)}</span>`
+      : `<span class="muted">Sin ayudas</span>`;
+  const clock = play.parSec > 0 ? `<span class="clock t-${liveTier(s.activeMs, play.parSec)}" data-clock="level" aria-hidden="true">⏱ ${formatClock(s.activeMs)}</span>` : '';
   const streak = s.usesHearts && s.streak >= 2 ? `<span class="combo">🔥 ${s.streak}${s.chispaArmed ? ' ✨' : ''}</span>` : '';
   const pct = Math.round((s.index / s.total) * 100);
   return `<main class="screen play">
     <header class="topbar">
       ${button('quit-play', '✕', 'btn-ghost btn-icon', 'aria-label="Salir de la partida"')}
       <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${s.total}" aria-valuenow="${s.index}" aria-label="Pregunta ${s.index + 1} de ${s.total}"><span style="width:${pct}%"></span></div>
-      ${status}${streak}
+      ${status}${clock}${streak}
     </header>
     <section class="question card" aria-live="polite">
       ${s.baseDifficulty && q.difficulty && q.difficulty > s.baseDifficulty ? '<span class="pill bonus">🚀 Reto extra</span>' : ''}
@@ -383,9 +426,9 @@ function play(v: ViewState): string {
   return pl.phase === 'intro' ? playIntro(v, pl) : playQuestion(v, pl);
 }
 
-function missedList(r: ResultState): string {
+function missedList(r: ResultState, gameOver = false): string {
   if (!r.outcome.missed.length) return '';
-  return `<section class="card"><h2>Para repasar</h2><ul class="missed">${r.outcome.missed
+  return `<section class="card missed-card"><h2>${gameOver ? '🔎 Tus errores' : 'Para repasar'}</h2><ul class="missed">${r.outcome.missed
     .map(
       (m) => `<li>${m.question.visual ? `<span class="visual-small">${esc(m.question.visual)}</span>` : ''}
       <span>${esc(m.question.prompt)}</span>
@@ -396,15 +439,18 @@ function missedList(r: ResultState): string {
 
 function result(v: ViewState): string {
   const r = v.result as ResultState;
+  const p = v.profile as Profile;
   const o = r.outcome;
   const rw = r.reward;
+  const gameOver = r.ref.kind === 'level' && o.lost;
   let title: string;
   let sub = '';
   let head = '';
   if (r.ref.kind === 'level') {
     if (o.lost) {
-      title = '¡Casi lo logras!';
-      sub = 'Se acabaron los corazones. Practicar un poco más y lo consigues.';
+      title = 'Game Over';
+      sub = 'Te quedaste sin energía ⚡. Mira tus errores, recarga y vuelve con más fuerza.';
+      head = `<p class="big-emoji" aria-hidden="true">💥</p>`;
     } else {
       title = o.stars === 3 ? '¡Perfecto!' : '¡Nivel superado!';
       head = `<p class="big-stars" aria-label="${starsLabel(o.stars)}">${stars(o.stars)}</p>`;
@@ -414,6 +460,10 @@ function result(v: ViewState): string {
     title = o.passed ? '¡Venciste al Guardián!' : 'El Guardián resistió';
     sub = `${o.correct} de ${o.total} aciertos (hacen falta ${GUARDIAN_PASS_COUNT})`;
     head = `<p class="big-emoji" aria-hidden="true">${o.passed ? '🏅' : '🛡️'}</p>`;
+  } else if (r.ref.kind === 'recharge') {
+    title = o.correct > 0 ? '¡Energía recargada!' : 'Sigue practicando';
+    sub = `${o.correct} de ${o.total} aciertos · ⚡ ${p.energy} de ${MAX_ENERGY}`;
+    head = `<p class="big-emoji" aria-hidden="true">🔋</p>`;
   } else {
     title = o.mistakes === 0 ? '¡Memoria de elefante!' : '¡Repaso hecho!';
     sub = `${o.correct} de ${o.total} aciertos`;
@@ -421,7 +471,19 @@ function result(v: ViewState): string {
   }
 
   const lines: string[] = [];
+  if (r.ref.kind === 'level' && rw.activeMs > 0) {
+    lines.push(`<li>⏱ Tiempo: ${formatClock(rw.activeMs)}${r.parSec > 0 ? ` <span class="muted">(meta ${formatClock(r.parSec * 1000)})</span>` : ''}</li>`);
+    if (rw.newRecord) lines.push('<li>🏆 ¡Nuevo récord personal!</li>');
+  }
+  if (rw.speed === 'rayo') {
+    lines.push(`<li class="bonus-line">🚀 ¡Bono Rayo por rapidez! +${SPEED_BONUS.rayo.stars} ⭐ +${SPEED_BONUS.rayo.energy} ⚡ y un poder</li>`);
+  } else if (rw.speed === 'veloz') {
+    lines.push(`<li class="bonus-line">⚡ ¡Bono Veloz! +${SPEED_BONUS.veloz.stars} ⭐ +${SPEED_BONUS.veloz.energy} ⚡</li>`);
+  } else if (r.ref.kind === 'level' && !o.lost && rw.activeMs > 0 && r.parSec > 0) {
+    lines.push(`<li class="muted">Termina en ${formatClock(r.parSec * 1000)} o menos con 1 error como máximo para ganar un bono.</li>`);
+  }
   if (rw.wallet > 0) lines.push(`<li>⭐ +${rw.wallet} estrellas</li>`);
+  if (rw.energyGain > 0) lines.push(`<li>⚡ +${rw.energyGain} de energía</li>`);
   if (rw.chest) lines.push('<li>🎁 ¡Cofre por nivel perfecto!</li>');
   if (rw.powerGift) lines.push(`<li>${POWER_INFO[rw.powerGift].emoji} Nuevo poder: ${POWER_INFO[rw.powerGift].name}</li>`);
   for (const c of rw.masteryChanges) {
@@ -431,28 +493,130 @@ function result(v: ViewState): string {
   if (rw.worldCompleted) lines.push('<li>🌍 ¡Mundo completado!</li>');
   if (o.bestStreak >= 3 && r.ref.kind === 'level') lines.push(`<li>🔥 Mejor racha: ${o.bestStreak}</li>`);
 
+  const worldPrize = rw.worldPrize
+    ? `<section class="prize" aria-label="Premio del mundo">
+        <p class="prize-title">🎖️ ¡Premio del mundo!</p>
+        <p>+${rw.worldPrize.stars} ⭐ · un poder de cada tipo (${POWERS.map((k) => POWER_INFO[k].emoji).join(' ')}) · ⚡ energía llena · medalla</p>
+      </section>`
+    : '';
+
   const passedLevel = r.ref.kind === 'level' && !o.lost;
   const buttons: string[] = [];
-  if (passedLevel) {
+  if (rw.worldCompleted && p.medals.length) buttons.push(button('result-summary', '🏅 Ver resumen del mundo', 'btn-gold btn-xl'));
+  if (gameOver) {
+    if (p.energy > 0) buttons.push(button('result-retry', `Intentar otra vez (⚡ ${p.energy})`, 'btn-primary btn-xl'));
+    else buttons.push(button('start-recharge', '🔋 Recargar practicando', 'btn-primary btn-xl'));
+  } else if (passedLevel) {
     const last = r.ref.kind === 'level' && r.ref.level >= LEVELS_PER_REGION - 1;
-    buttons.push(button('result-next', last ? 'Ir al Guardián' : 'Siguiente nivel', 'btn-primary btn-xl'));
-  } else if (r.ref.kind === 'level' || (r.ref.kind === 'guardian' && !o.passed)) {
+    buttons.push(button('result-next', last ? 'Ir al Guardián' : 'Siguiente nivel', rw.worldCompleted ? 'btn-soft' : 'btn-primary btn-xl'));
+  } else if (r.ref.kind === 'guardian' && !o.passed) {
     buttons.push(button('result-retry', 'Intentar otra vez', 'btn-primary btn-xl'));
+  } else if (r.ref.kind === 'recharge' && p.energy < MAX_ENERGY) {
+    buttons.push(button('start-recharge', '🔋 Recargar otra vez', 'btn-primary btn-xl'));
   }
-  if (r.ref.kind !== 'review') buttons.push(button('result-region', 'Volver a la región', 'btn-soft'));
-  buttons.push(button('result-map', 'Ir al mapa', r.ref.kind === 'review' || (r.ref.kind === 'guardian' && o.passed) ? 'btn-primary btn-xl' : 'btn-ghost'));
+  if (r.ref.kind === 'level' || r.ref.kind === 'guardian' || (r.ref.kind === 'recharge' && v.regionId)) {
+    buttons.push(button('result-region', 'Volver a la región', 'btn-soft'));
+  }
+  const mapPrimary = r.ref.kind === 'review' || (r.ref.kind === 'guardian' && o.passed && !rw.worldCompleted) || (r.ref.kind === 'recharge' && p.energy >= MAX_ENERGY);
+  buttons.push(button('result-map', 'Ir al mapa', mapPrimary ? 'btn-primary btn-xl' : 'btn-ghost'));
+  buttons.push(button('go-home', '🏠 Inicio', 'btn-ghost'));
+
+  const energyPanel = gameOver
+    ? `<div class="energy-panel" aria-label="Energía">
+        <span class="energy-icons">${energyIcons(p.energy)}</span>
+        ${energyCountdown(p, v.nowMs)}
+        <p class="muted">Cada acierto al «Recargar practicando» devuelve 1 ⚡. También recuperas 1 ⚡ cada 5 minutos.</p>
+      </div>`
+    : '';
 
   const tip = r.tip ? `<section class="card tip"><p>💡 ${esc(r.tip)}</p></section>` : '';
-  return `<main class="screen result">
+  return `<main class="screen result ${gameOver ? 'is-gameover' : ''}">
     <section class="card center">
       ${head}
       <h1>${esc(title)}</h1>
       <p class="lead">${esc(sub)}</p>
+      ${energyPanel}
       ${lines.length ? `<ul class="rewards">${lines.join('')}</ul>` : ''}
+      ${worldPrize}
       <div class="stack">${buttons.join('')}</div>
     </section>
+    ${missedList(r, gameOver)}
     ${tip}
-    ${r.ref.kind === 'level' && o.lost ? '' : missedList(r)}
+  </main>`;
+}
+
+/** Pantalla de recarga: cuánta energía hay, cuándo llega la próxima y cómo ganar más. */
+function energyScreen(v: ViewState): string {
+  const p = v.profile as Profile;
+  const full = p.energy >= MAX_ENERGY;
+  return `<main class="screen energy">
+    ${topBar(p, 'Energía', { action: v.regionId ? 'result-region' : 'back-map', label: v.regionId ? 'Región' : 'Mapa' })}
+    <section class="card center">
+      <p class="energy-icons big">${energyIcons(p.energy)}</p>
+      <h2>${full ? '¡Energía llena!' : p.energy === 0 ? 'Sin energía' : `Tienes ${p.energy} de ${MAX_ENERGY}`}</h2>
+      ${energyCountdown(p, v.nowMs)}
+      <p>${p.energy === 0 ? 'Recárgala para seguir con los niveles.' : 'Cada error en un nivel gasta 1 ⚡.'}</p>
+      ${full ? '' : button('start-recharge', '🔋 Recargar practicando', 'btn-primary btn-xl')}
+      ${full ? '' : `<p class="muted">${RECHARGE_QUESTIONS} preguntas fáciles: cada acierto devuelve 1 ⚡.</p>`}
+    </section>
+    <section class="card">
+      <h2>Más formas de ganar ⚡</h2>
+      <ul class="ways">
+        <li>⏱ Termina un nivel rápido: +${SPEED_BONUS.veloz.energy} ⚡</li>
+        <li>🌟 Nivel perfecto: +1 ⚡</li>
+        <li>🎁 Cofre del día: +${CHEST_ENERGY} ⚡</li>
+        <li>🏅 Completa un mundo: energía llena</li>
+        <li>🕒 Esperando: +1 ⚡ cada 5 minutos</li>
+      </ul>
+    </section>
+  </main>`;
+}
+
+/** Resumen del mundo completado: medalla, estrellas, Guardianes y tiempos. */
+function worldSummaryScreen(v: ViewState): string {
+  const p = v.profile as Profile;
+  const sum = worldSummary(p, v.summaryWorldId ?? 1);
+  const next = WORLDS.find((w) => w.id === sum.world.id + 1);
+  const rows = sum.regions
+    .map(
+      (r) => `<li>
+        <span class="sum-emoji" aria-hidden="true">${r.region.emoji}</span>
+        <span class="sum-name">${esc(r.region.name)}</span>
+        <span class="sum-stats">★ ${r.stars}/${r.maxStars} · 🛡️ ${r.guardianBest}/${GUARDIAN_QUESTIONS}${r.bestMs ? ` · ⏱ ${formatClock(r.bestMs)}` : ''}</span>
+        <span class="sum-mastery">${MASTERY_EMOJI[r.mastery]} ${MASTERY_LABEL[r.mastery]}</span>
+      </li>`,
+    )
+    .join('');
+  return `<main class="screen summary" data-theme="${sum.world.theme}">
+    ${topBar(p, 'Resumen del mundo', { action: 'close-summary', label: 'Mapa' })}
+    <section class="card center">
+      <p class="medal" aria-hidden="true">${MEDAL_EMOJI[sum.tier]}</p>
+      <h1>${sum.world.emoji} ${esc(sum.world.name)}</h1>
+      <p class="lead">Medalla de ${MEDAL_NAME[sum.tier]} · ${esc(sum.world.grade)}</p>
+      <ul class="sum-totals">
+        <li><strong>⭐ ${sum.stars}/${sum.maxStars}</strong><span>estrellas en niveles</span></li>
+        <li><strong>🛡️ ${sum.regions.filter((r) => r.guardianBest >= GUARDIAN_PASS_COUNT).length}/${sum.regions.length}</strong><span>Guardianes vencidos</span></li>
+        <li><strong>🧠 ${sum.strong}/${sum.regions.length}</strong><span>habilidades sólidas</span></li>
+      </ul>
+      <p class="muted">Premio del mundo: +${WORLD_PRIZE_STARS} ⭐, un poder de cada tipo y la energía llena.</p>
+    </section>
+    <section class="card">
+      <h2>Tu recorrido</h2>
+      <ol class="sum-list">${rows}</ol>
+      <p class="muted">Rejuega los niveles para ganar más estrellas y mejorar tus tiempos. Pasa de ${Math.round(sum.maxStars * 0.7)} ⭐ para Plata y de ${Math.round(sum.maxStars * 0.9)} ⭐ para Oro.</p>
+    </section>
+    ${
+      sum.isFinal
+        ? `<section class="card prize"><p class="prize-title">🏆 ¡Terminaste todos los mundos de Matemundo!</p>
+            <p>Desde contar frutas hasta derivar funciones: ${WORLDS.length} mundos y ${WORLDS.length * 5} habilidades. ¡Eres un verdadero explorador de las mates!</p></section>`
+        : next
+          ? `<section class="card"><p>Siguiente aventura: <strong>${next.emoji} ${esc(next.name)}</strong> · ${esc(next.grade)}</p></section>`
+          : ''
+    }
+    <div class="stack">
+      ${button('close-summary', 'Ir al mapa', 'btn-primary btn-xl')}
+      ${button('go-home', '🏠 Inicio', 'btn-ghost')}
+    </div>
   </main>`;
 }
 
@@ -690,6 +854,12 @@ export function renderView(v: ViewState): string {
       break;
     case 'shop':
       body = shop(v);
+      break;
+    case 'energy':
+      body = energyScreen(v);
+      break;
+    case 'world-summary':
+      body = worldSummaryScreen(v);
       break;
     case 'parents':
       body = parents(v);
