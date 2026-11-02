@@ -205,7 +205,7 @@ function map(v: ViewState): string {
       ${button('open-parents', '👪 Familias', 'btn-ghost')}
     </div>
     ${WORLDS.map((w) => worldBlock(p, w)).join('')}
-    <section class="upcoming"><h2>Próximamente</h2><ul>${timeline}</ul></section>
+    ${timeline ? `<section class="upcoming"><h2>Próximamente</h2><ul>${timeline}</ul></section>` : ''}
     ${button('switch-profile', 'Cambiar de explorador', 'btn-ghost')}
   </main>`;
 }

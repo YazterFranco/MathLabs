@@ -1,4 +1,4 @@
-// Mundo 9 en navegador real: cada región se juega en el nivel 3 (con respuestas escritas donde toca).
+// Mundos 9, 10 y 11 en navegador real: cada región se juega en el nivel 3 (con respuestas escritas donde toca).
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
@@ -29,20 +29,24 @@ try {
     const s = window.__matemundo.state.save;
     const p = s.profiles[0];
     const done = { levels: [3, 3, 3], guardianPassed: true, guardianBest: 10, guardianTries: 1 };
-    for (let w = 1; w <= 8; w++) for (let r = 1; r <= 5; r++) p.regions[`w${w}r${r}`] = { ...done, levels: [3, 3, 3] };
-    for (let r = 1; r <= 5; r++) p.regions[`w9r${r}`] = { levels: [3, 3, 0], guardianPassed: true, guardianBest: 10, guardianTries: 1 };
-    localStorage.setItem('mathlabs:save', JSON.stringify(s));
+    for (let w = 1; w <= 11; w++) for (let r = 1; r <= 5; r++) p.regions[`w${w}r${r}`] = { ...done, levels: [3, 3, 0] };
+        localStorage.setItem('mathlabs:save', JSON.stringify(s));
   });
   await page.reload();
   await page.click('[data-action=start]');
   await page.click('[data-action=select-profile]');
-  assert.ok((await page.locator('.world[data-theme=castle]').count()) === 1, 'el mundo 9 aparece con su tema');
-  await page.locator('.world[data-theme=castle]').scrollIntoViewIfNeeded();
-  if (shots) await page.screenshot({ path: `${shots}/w9-map.png` });
+  for (const theme of ['castle', 'tower', 'summit']) {
+    assert.equal(await page.locator(`.world[data-theme=${theme}]`).count(), 1, `el mundo ${theme} aparece con su tema`);
+  }
+  assert.equal(await page.locator('.upcoming').count(), 0, 'ya no hay mundos próximos');
+  await page.locator('.world[data-theme=summit]').scrollIntoViewIfNeeded();
+  if (shots) await page.screenshot({ path: `${shots}/map-end.png` });
 
+  const typedExpected = { 9: [1, 2, 5], 10: [1, 3, 5], 11: [1, 2, 3, 4, 5] };
+  for (const w of [9, 10, 11]) {
   const typedSeen = [];
   for (let r = 1; r <= 5; r++) {
-    await page.click(`[data-action=open-region][data-id=w9r${r}]`);
+    await page.click(`[data-action=open-region][data-id=w${w}r${r}]`);
     await page.click('[data-action=open-level][data-level="2"]');
     await page.click('[data-action=begin]');
     for (let guard = 0; guard < 300; guard++) {
@@ -57,7 +61,7 @@ try {
         await page.waitForTimeout(50);
         continue;
       }
-      if (shots && info.index === 0) await page.screenshot({ path: `${shots}/w9r${r}.png` });
+      if (shots && info.index === 0) await page.screenshot({ path: `${shots}/w${w}r${r}.png` });
       if (info.input === 'number') {
         typedSeen.push(r);
         await page.fill('#typed-input', info.answer);
@@ -75,16 +79,17 @@ try {
       );
     }
     await page.waitForFunction(() => window.__matemundo.state.screen === 'result', null, { timeout: 8000 });
-    if (shots) await page.screenshot({ path: `${shots}/w9r${r}-result.png` });
+    if (shots) await page.screenshot({ path: `${shots}/w${w}r${r}-result.png` });
     const out = await page.evaluate(() => window.__matemundo.state.result.outcome);
-    assert.equal(out.stars, 3, `región w9r${r}: nivel 3 con 3 estrellas`);
+    assert.equal(out.stars, 3, `región w${w}r${r}: nivel 3 con 3 estrellas`);
     await page.click('[data-action=result-map]');
   }
-  assert.deepEqual([...new Set(typedSeen)].sort(), [1, 2, 5], 'escriben en ecuaciones, sistemas y cuadráticas');
+  assert.deepEqual([...new Set(typedSeen)].sort((a, b) => a - b), typedExpected[w], `mundo ${w}: regiones con respuesta escrita`);
+  }
   assert.deepEqual(errors, [], 'sin errores de consola');
-  console.log('E2E mundo 9 OK');
+  console.log('E2E mundos 9 a 11 OK');
 } catch (err) {
-  console.error('E2E mundo 9 FALLÓ:', err.message);
+  console.error('E2E mundos 9 a 11 FALLÓ:', err.message);
   console.error(errors.join('\n'));
   process.exitCode = 1;
 } finally {

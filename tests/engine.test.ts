@@ -61,7 +61,7 @@ test('datos: cada región apunta a habilidades que existen y los ids son únicos
   for (const r of ALL_REGIONS) for (const s of r.skillIds) assert.doesNotThrow(() => getSkill(s));
   const used = new Set(ALL_REGIONS.flatMap((r) => r.skillIds));
   for (const s of SKILLS) assert.ok(used.has(s.id), `${s.id} no se usa en ningún mundo`);
-  assert.equal(WORLDS.length, 9);
+  assert.equal(WORLDS.length, 11);
   assert.equal(GUARDIAN_PASS_COUNT, 9);
 });
 

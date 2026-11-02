@@ -28,6 +28,8 @@
 [data-theme='space'] { --bg: #17102e; --bg-2: #6a2c91; --soft: #f1e6ff; --soft-edge: #d5b9f5; }
 [data-theme='lab'] { --bg: #5c1a4a; --bg-2: #d6409f; --soft: #ffe3f3; --soft-edge: #f5b5dc; }
 [data-theme='castle'] { --bg: #3a3a4e; --bg-2: #8a6d1f; --soft: #f7f0dc; --soft-edge: #e0d0a0; }
+[data-theme='tower'] { --bg: #2f3d0c; --bg-2: #6b8a14; --soft: #f3f7d9; --soft-edge: #d6e48e; }
+[data-theme='summit'] { --bg: #04302f; --bg-2: #0f8f84; --soft: #def8f4; --soft-edge: #a6ebe0; }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -181,6 +183,8 @@ legend { font-weight: 800; margin-bottom: 6px; padding: 0; }
 .world[data-theme='space'] { background: linear-gradient(180deg, #6a2c91, #17102e); }
 .world[data-theme='lab'] { background: linear-gradient(180deg, #d6409f, #5c1a4a); }
 .world[data-theme='castle'] { background: linear-gradient(180deg, #8a6d1f, #3a3a4e); }
+.world[data-theme='tower'] { background: linear-gradient(180deg, #6b8a14, #2f3d0c); }
+.world[data-theme='summit'] { background: linear-gradient(180deg, #0f8f84, #04302f); }
 .locked-note { margin: 8px 0 0; opacity: .9; }
 .trail { display: grid; gap: 14px; margin-top: 12px; position: relative; }
 .node { display: grid; grid-template-columns: 76px 1fr; grid-template-areas: 'btn name' 'btn stars'; align-items: center; column-gap: 14px; }

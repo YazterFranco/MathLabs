@@ -2,13 +2,13 @@
 
 Juego web de matemáticas para niños, desde preescolar (5 años) hacia secundaria. El niño avanza **solo cuando demuestra dominio**, con potenciadores, combos, mascota y un guardado local.
 
-> Esta versión incluye los **mundos 1 a 9** (preescolar a 9.º grado: 45 regiones y 45 habilidades, hasta fracciones, decimales, razones, números negativos, ecuaciones, sistemas, factorización y cuadráticas). Los mundos 10 y 11 (hasta 12.º grado) aparecen como «Próximamente».
+> Esta versión incluye los **11 mundos** (preescolar a 12.º grado: 55 regiones y 55 habilidades). Pasa por conteo, sumas y restas, tablas, fracciones, decimales, razones, negativos, ecuaciones, sistemas, factorización, cuadráticas, funciones, pendiente, exponentes, trigonometría, logaritmos, progresiones, conteo y derivadas.
 
 ## Cómo se juega
 
-- **Mapa**: 9 mundos, 5 regiones cada uno. Cada región tiene 3 niveles de 8 preguntas y un **Reto del Guardián**.
+- **Mapa**: 11 mundos, 5 regiones cada uno. Cada región tiene 3 niveles de 8 preguntas y un **Reto del Guardián**.
 - **Corazones y combos** (solo en niveles): 3 corazones. Cada 3 aciertos seguidos se activa la **Chispa** (la siguiente vale doble). Cada 5, el **Rayo** devuelve un corazón.
-- **Respuesta escrita**: en el nivel 3 de ecuaciones y descuentos, y en sus Guardianes, el niño escribe el resultado en vez de elegirlo (adivinar no sirve). Solo se aceptan números enteros; un texto inválido avisa y no cuenta como intento. La prueba de nivel y los repasos siguen con opciones.
+- **Respuesta escrita**: en el nivel 3 de las habilidades de cálculo (ecuaciones, descuentos, sistemas, funciones, trigonometría, logaritmos, progresiones, conteo, derivadas…), y en sus Guardianes, el niño escribe el resultado en vez de elegirlo (adivinar no sirve). Solo se aceptan números enteros; un texto inválido avisa y no cuenta como intento. La prueba de nivel y los repasos siguen con opciones.
 - **Dificultad adaptativa** (solo en niveles): empieza según el historial de la habilidad (más reto si ya es sólida, más calma si le cuesta). Con 3 aciertos seguidos sube un punto («🚀 Reto extra») y con 2 errores de 3 baja, siempre a ±1 de la dificultad del nivel. El Guardián **no se adapta**: es el examen. Los repasos priorizan lo que más cuesta, y el panel de familias marca con 🔧 las habilidades que conviene reforzar.
 - **Potenciadores**: Lupa (tacha 2 opciones), Pista mágica y Escudo (un error no rompe la racha). Una vez por nivel; se ganan jugando.
 - **Evidencia de dominio**: se sube de región solo al vencer al Guardián (10 preguntas **sin ayudas**, 9 aciertos para pasar). Las habilidades se confirman como «Dominadas» con **repasos espaciados** (1, 3, 7 y 14 días).
@@ -46,19 +46,29 @@ scripts/      build.mjs y serve.mjs
 tests/        pruebas del motor y prueba E2E
 ```
 
-Las pruebas recalculan cada respuesta con un solucionador independiente para 45 habilidades × 3 dificultades × 300 semillas.
+Las pruebas recalculan cada respuesta con un solucionador independiente para 55 habilidades × 3 dificultades × 300 semillas.
 
 ## Publicar en Cloudflare Pages (gratis)
 
 **Desde el panel (recomendado):** Workers y Pages → Crear → Pages → Conectar con Git → elige este repositorio.
 - Comando de compilación: `npm run build`
 - Directorio de salida: `dist`
-- Variable de entorno: ninguna. Si te pide versión de Node, usa `NODE_VERSION=22`.
+- Versión de Node: el archivo `.node-version` ya pide Node 22; si el panel pregunta, usa la variable `NODE_VERSION=22`.
 
 Cada `git push` a `main` vuelve a publicar.
 
-**Con Wrangler:** `npm install` y luego `npx wrangler login` y `npm run deploy`.
+**Con la terminal (una sola vez, necesita Node 22 y una cuenta de Cloudflare):**
+
+```bash
+git clone https://github.com/YazterFranco/MathLabs.git && cd MathLabs
+npm install
+npx wrangler login          # abre el navegador para autorizar tu cuenta
+npm run cf:create           # crea el proyecto «mathlabs» en Cloudflare Pages
+npm run deploy              # compila y sube dist/ → https://mathlabs.pages.dev
+```
+
+Para publicar cambios después: `npm run deploy`.
 
 ## Pendiente
 
-Mundos 10 y 11 (funciones, geometría analítica, trigonometría, preuniversitario), sincronización en la nube con cuenta de familia (hoy el progreso vive en el dispositivo), y migrar el guardado a IndexedDB si crece.
+Sincronización en la nube con cuenta de familia (hoy el progreso vive en el dispositivo), migrar el guardado a IndexedDB si crece, y una pantalla final de celebración al vencer el Guardián de la Cumbre.

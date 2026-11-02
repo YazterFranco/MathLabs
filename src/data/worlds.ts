@@ -163,6 +163,36 @@ export const WORLDS: World[] = [
       { id: 'w9r5', name: 'Trono de las Raíces', emoji: '👑', skillIds: ['quadratic'] },
     ],
   },
+  {
+    id: 10,
+    name: 'Torre de las Funciones',
+    emoji: '🗼',
+    grade: '10.º y 11.º grado',
+    ages: '14 a 16 años',
+    theme: 'tower',
+    regions: [
+      { id: 'w10r1', name: 'Máquina de Funciones', emoji: '⚙️', skillIds: ['linearFn'] },
+      { id: 'w10r2', name: 'Rampa de Pendientes', emoji: '📐', skillIds: ['slope'] },
+      { id: 'w10r3', name: 'Ejes del Mirador', emoji: '🧭', skillIds: ['lineCuts'] },
+      { id: 'w10r4', name: 'Sótano de Exponentes', emoji: '⚡', skillIds: ['exponents'] },
+      { id: 'w10r5', name: 'Cúpula de la Parábola', emoji: '🌈', skillIds: ['parabola'] },
+    ],
+  },
+  {
+    id: 11,
+    name: 'Cumbre',
+    emoji: '🏁',
+    grade: '12.º grado',
+    ages: '16 a 17 años',
+    theme: 'summit',
+    regions: [
+      { id: 'w11r1', name: 'Refugio de Triángulos', emoji: '⛺', skillIds: ['trig'] },
+      { id: 'w11r2', name: 'Glaciar de Logaritmos', emoji: '🧊', skillIds: ['logExp'] },
+      { id: 'w11r3', name: 'Sendero de Progresiones', emoji: '🥾', skillIds: ['seq'] },
+      { id: 'w11r4', name: 'Campamento de Conteo', emoji: '🏕️', skillIds: ['counting'] },
+      { id: 'w11r5', name: 'Cima de las Derivadas', emoji: '🏔️', skillIds: ['derivative'] },
+    ],
+  },
 ];
 
 export interface UpcomingWorld {
@@ -173,10 +203,7 @@ export interface UpcomingWorld {
   ages: string;
 }
 
-export const UPCOMING_WORLDS: UpcomingWorld[] = [
-  { id: 10, name: 'Torre de las Funciones', emoji: '🗼', grade: '10.º y 11.º', ages: '14 a 16 años' },
-  { id: 11, name: 'Cumbre', emoji: '🏁', grade: '12.º grado', ages: '16 a 17 años' },
-];
+export const UPCOMING_WORLDS: UpcomingWorld[] = [];
 
 export const ALL_REGIONS: Region[] = WORLDS.flatMap((w) => w.regions);
 

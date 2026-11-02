@@ -23,3 +23,14 @@ test('voz: los paréntesis del álgebra se leen como factores', () => {
   assert.equal(spokenText('(x − 3)(x − 7) = 0'), 'x menos 3 por el paréntesis x menos 7 es igual a 0');
   assert.equal(spokenText('x² − 25'), 'x al cuadrado menos 25');
 });
+
+test('voz: funciones, potencias, logaritmos y trigonometría', () => {
+  assert.equal(spokenText("f(x) = 3x + 4. ¿Cuánto vale f(5)?"), 'f de x es igual a 3 x más 4. ¿Cuánto vale f de 5 ?');
+  assert.equal(spokenText("¿Cuánto vale f'(4)?"), '¿Cuánto vale f prima de 4 ?');
+  assert.equal(spokenText('x³ × x⁴ = ?'), 'x al cubo por x a la cuarta es igual a ?');
+  assert.equal(spokenText('(x²)³ = ?'), 'x al cuadrado elevado al cubo es igual a ?');
+  assert.equal(spokenText('log₂ 8 = ?'), 'logaritmo base 2 de 8 es igual a ?');
+  assert.equal(spokenText('2^x = 32'), '2 elevado a x es igual a 32');
+  assert.equal(spokenText('sen θ = 3/5'), 'sen theta es igual a 3 quintos');
+});
+

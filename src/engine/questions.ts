@@ -1411,6 +1411,395 @@ const quadratic: Generator = (rng, d) => {
   return typedQuestion('quadratic', prompt, result, hint, { p, q, form });
 };
 
+/* ───────────── Mundo 10 · Torre de las Funciones ───────────── */
+
+const SUPS = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+const SUBS = '₀₁₂₃₄₅₆₇₈₉';
+const toAlphabet =
+  (alphabet: string) =>
+  (n: number): string =>
+    String(n)
+      .split('')
+      .map((c) => alphabet[Number(c)])
+      .join('');
+const toSup = toAlphabet(SUPS);
+const toSub = toAlphabet(SUBS);
+const mono = (c: number, e: number): string => `${c === 1 ? '' : c}x${e === 1 ? '' : toSup(e)}`;
+
+const linearFn: Generator = (rng, d) => {
+  if (d === 3) {
+    const a = rng.int(2, 9);
+    const b = rng.int(1, 15);
+    if (rng.chance(0.5)) {
+      const x = rng.int(2, 15);
+      return typedQuestion(
+        'linearFn',
+        `f(x) = ${a}x + ${b}. Si f(x) = ${a * x + b}, ¿cuánto vale x?`,
+        x,
+        `Escribe ${a}x + ${b} = ${a * x + b}. Resta ${b} a los dos lados y divide entre ${a}.`,
+        { a, b, x },
+      );
+    }
+    const t = rng.int(1, 9);
+    const s = sample<number>(() => rng.int(1, 9), (v) => v !== t);
+    return typedQuestion(
+      'linearFn',
+      `f(x) = ${a}x + ${b}. ¿Cuánto vale f(${t}) + f(${s})?`,
+      a * t + b + a * s + b,
+      'Calcula cada f por separado: cambia la x por el número. Al final suma los dos resultados.',
+      { a, b, t, s },
+    );
+  }
+  const a = rng.int(2, d === 1 ? 5 : 9);
+  const t = rng.int(d === 1 ? 1 : 2, d === 1 ? 6 : 9);
+  const minus = d === 2 && rng.chance(0.5);
+  const b = minus ? rng.int(1, a * t - 1) : rng.int(1, 9);
+  const value = minus ? a * t - b : a * t + b;
+  const prompt = `f(x) = ${a}x ${minus ? '−' : '+'} ${b}. ¿Cuánto vale f(${t})?`;
+  const { choices, answer } = buildChoices(rng, value, [a + t + b, a * t, minus ? a * t + b : value + b, value + 1, value - 1, a + t], { min: 0, max: 300 });
+  return {
+    skillId: 'linearFn',
+    prompt,
+    choices,
+    answer,
+    hint: `Cambia la x por ${t}: ${a} × ${t} primero, y después ${minus ? 'resta' : 'suma'} ${b}.`,
+    meta: { a, b, t },
+  };
+};
+
+const slope: Generator = (rng, d) => {
+  const neg = d === 3 && rng.chance(0.5);
+  const m = rng.int(1, d === 1 ? 4 : 7);
+  const dx = rng.int(1, d === 1 ? 3 : 5);
+  const x1 = rng.int(0, 6);
+  const y1 = (neg ? m * dx : 0) + rng.int(0, d === 1 ? 4 : 8);
+  const x2 = x1 + dx;
+  const y2 = neg ? y1 - m * dx : y1 + m * dx;
+  const swap = d === 3 && rng.chance(0.5);
+  const [p, q] = swap ? [[x2, y2], [x1, y1]] : [[x1, y1], [x2, y2]];
+  const result = neg ? -m : m;
+  const { choices, answer } = intChoices(rng, result, [-result, result + 1, result - 1, y2 - y1, dx, m * dx]);
+  return {
+    skillId: 'slope',
+    prompt: `Una recta pasa por (${p[0]}, ${p[1]}) y (${q[0]}, ${q[1]}). ¿Cuál es su pendiente?`,
+    choices,
+    answer,
+    hint: 'Pendiente = lo que cambia y ÷ lo que cambia x. Resta las y y las x en el mismo orden.',
+    meta: { m: result, dx },
+  };
+};
+
+const lineCuts: Generator = (rng, d) => {
+  let prompt: string;
+  let result: number;
+  let wrongs: number[];
+  let hint: string;
+  if (d === 1) {
+    const m = rng.int(2, 9);
+    const b = rng.int(1, 12);
+    const askSlope = rng.chance(0.5);
+    prompt = `En y = ${m}x + ${b}, ¿cuál es ${askSlope ? 'la pendiente' : 'el valor de y donde la recta corta al eje y'}?`;
+    result = askSlope ? m : b;
+    wrongs = [m + b, m * b, result + 1, result - 1, askSlope ? b : m];
+    hint = askSlope ? 'En y = mx + b, la pendiente es el número que multiplica a la x.' : 'En y = mx + b, la recta corta al eje y en b: el número que va solo.';
+  } else {
+    const k = rng.int(d === 2 ? 1 : 2, d === 2 ? 9 : 12);
+    const a = rng.int(2, d === 2 ? 9 : 7);
+    result = k;
+    const line = d === 2 ? `y = ${a}x − ${a * k}` : `y = −${a}x + ${a * k}`;
+    prompt = `¿En qué valor de x corta la recta ${line} al eje x?`;
+    wrongs = [a * k, a, k + 1, k - 1, a + k, a * k - a];
+    hint = 'Para cortar el eje x, y vale 0. Iguala la expresión a 0 y despeja x.';
+    if (d === 3) return typedQuestion('lineCuts', prompt, result, hint, { a, k });
+  }
+  const { choices, answer } = buildChoices(rng, result, wrongs, { min: 1, max: 150 });
+  return { skillId: 'lineCuts', prompt, choices, answer, hint, meta: { d } };
+};
+
+const exponents: Generator = (rng, d) => {
+  let prompt: string;
+  let ac = 1;
+  let ae: number;
+  let wrongs: string[];
+  const exps = (list: number[]): string[] => list.filter((e) => e >= 2).map((e) => mono(1, e));
+  if (d === 1) {
+    const [m, n] = sample<[number, number]>(
+      () => [rng.int(2, 5), rng.int(2, 5)],
+      ([a, b]) => a !== b && a + b <= 9,
+    );
+    prompt = `x${toSup(m)} × x${toSup(n)} = ?`;
+    ae = m + n;
+    wrongs = [...exps([m * n, m + n + 1, m + n - 1]), mono(2, m + n)];
+  } else if (d === 2) {
+    if (rng.chance(0.5)) {
+      const m = rng.int(5, 9);
+      const n = rng.int(2, m - 2);
+      prompt = `x${toSup(m)} ÷ x${toSup(n)} = ?`;
+      ae = m - n;
+      wrongs = [...exps([m + n, m * n, m - n + 1, m - n - 1])];
+    } else {
+      const [m, n] = rng.pick<[number, number]>([[2, 2], [2, 3], [3, 2], [2, 4], [4, 2], [3, 3]]);
+      prompt = `(x${toSup(m)})${toSup(n)} = ?`;
+      ae = m * n;
+      wrongs = exps([m + n, m * n + 1, m * n - 1, m * n - 2]);
+    }
+  } else {
+    const kind = rng.pick(['mul', 'div', 'pow']);
+    if (kind === 'mul') {
+      const [m, n] = sample<[number, number]>(
+        () => [rng.int(2, 5), rng.int(2, 5)],
+        ([p, q]) => p + q <= 9,
+      );
+      const a = rng.int(2, 5);
+      const b = rng.int(2, 5);
+      prompt = `${mono(a, m)} × ${mono(b, n)} = ?`;
+      ac = a * b;
+      ae = m + n;
+      wrongs = [mono(a + b, m + n), mono(a * b, m * n), mono(a * b, m + n + 1), mono(a + b, m * n), mono(a * b, m + n - 1)];
+    } else if (kind === 'div') {
+      const a = rng.int(2, 6);
+      const b = rng.int(2, 5);
+      const m = rng.int(5, 9);
+      const n = rng.int(2, m - 2);
+      prompt = `${mono(a * b, m)} ÷ ${mono(b, n)} = ?`;
+      ac = a;
+      ae = m - n;
+      wrongs = [mono(a * b - b, m - n), mono(a, m + n), mono(a * b, m - n), mono(a, m - n + 1), mono(a, m - n - 1)];
+    } else {
+      const a = rng.int(2, 5);
+      const m = rng.int(2, 4);
+      prompt = `(${mono(a, m)})² = ?`;
+      ac = a * a;
+      ae = 2 * m;
+      wrongs = [mono(2 * a, 2 * m), mono(a * a, m + 2), mono(a, 2 * m), mono(a * a, m), mono(a * a, 2 * m + 1)];
+    }
+  }
+  const answer = mono(ac, ae);
+  return {
+    skillId: 'exponents',
+    prompt,
+    choices: textChoices(rng, answer, wrongs, (k) => mono(ac + k, ae)),
+    answer,
+    hint: 'Al multiplicar potencias de la misma base, se suman los exponentes; al dividir, se restan; al elevar una potencia a otra, se multiplican. Los números de adelante se operan aparte.',
+    meta: { d },
+  };
+};
+
+const parabola: Generator = (rng, d) => {
+  const h = rng.int(1, d === 1 ? 6 : 9);
+  const k = rng.int(1, 9);
+  if (d === 1) {
+    const askX = rng.chance(0.5);
+    const result = askX ? h : k;
+    const { choices, answer } = buildChoices(rng, result, [h + k, askX ? k : h, result + 1, result - 1, h * k], { min: 1, max: 100 });
+    return {
+      skillId: 'parabola',
+      prompt: `y = (x − ${h})² + ${k}. ¿${askX ? 'En qué valor de x está el vértice' : 'Cuál es el valor mínimo de y'}?`,
+      choices,
+      answer,
+      hint: 'En y = (x − h)² + k, el vértice está en x = h y el valor más bajo de y es k.',
+      meta: { h, k },
+    };
+  }
+  const c = h * h + k;
+  const prompt = `y = x² − ${2 * h}x + ${c}. ¿${d === 2 ? 'En qué valor de x está el vértice' : 'Cuál es el valor mínimo de y'}?`;
+  if (d === 3) {
+    return typedQuestion('parabola', prompt, k, `El vértice está en x = ${2 * h} ÷ 2 = ${h}. Cambia x por ${h} en la expresión para hallar el mínimo.`, { h, k });
+  }
+  const { choices, answer } = buildChoices(rng, h, [2 * h, h * h, c, h + 1, h - 1, k], { min: 1, max: 200 });
+  return {
+    skillId: 'parabola',
+    prompt,
+    choices,
+    answer,
+    hint: `El vértice de x² − bx + c está en x = b ÷ 2. Aquí, ${2 * h} ÷ 2.`,
+    meta: { h, k },
+  };
+};
+
+/* ───────────── Mundo 11 · Cumbre ───────────── */
+
+const TRIPLES: [number, number, number][] = [[3, 4, 5], [5, 12, 13], [8, 15, 17], [7, 24, 25], [20, 21, 29]];
+
+const trig: Generator = (rng, d) => {
+  if (d === 3) {
+    const [a, b, c] = rng.pick(TRIPLES.slice(0, 4));
+    const k = rng.int(2, 9);
+    const useSin = rng.chance(0.5);
+    const s = rng.chance(0.5) ? a : b;
+    const fn = useSin ? 'sen' : 'cos';
+    return typedQuestion(
+      'trig',
+      `En un triángulo rectángulo, ${fn} θ = ${s}/${c} y la hipotenusa mide ${k * c}. ¿Cuánto mide el cateto ${useSin ? 'opuesto' : 'adyacente'}?`,
+      k * s,
+      `${useSin ? 'sen' : 'cos'} θ es ${useSin ? 'cateto opuesto' : 'cateto adyacente'} ÷ hipotenusa. La hipotenusa es ${k} veces mayor que ${c}, así que el cateto también.`,
+      { s, c, k },
+    );
+  }
+  const [a, b, c] = rng.pick(d === 1 ? TRIPLES.slice(0, 2) : TRIPLES);
+  const opp = rng.chance(0.5) ? a : b;
+  const adj = opp === a ? b : a;
+  const fn = rng.pick(d === 1 ? ['sen', 'cos'] : ['sen', 'cos', 'tan']);
+  const answer = fn === 'sen' ? `${opp}/${c}` : fn === 'cos' ? `${adj}/${c}` : `${opp}/${adj}`;
+  const wrongs = [`${opp}/${c}`, `${adj}/${c}`, `${opp}/${adj}`, `${adj}/${opp}`, `${c}/${opp}`, `${c}/${adj}`];
+  return {
+    skillId: 'trig',
+    prompt: `Un triángulo rectángulo tiene catetos de ${a} y ${b}, e hipotenusa de ${c}. Si θ es el ángulo opuesto al cateto de ${opp}, ¿cuánto vale ${fn} θ?`,
+    choices: textChoices(rng, answer, wrongs, (k) => `${opp + k}/${c}`),
+    answer,
+    hint: 'sen = opuesto ÷ hipotenusa, cos = adyacente ÷ hipotenusa, tan = opuesto ÷ adyacente. El opuesto es el cateto que está frente al ángulo.',
+    meta: { fn, opp, adj, c },
+  };
+};
+
+const logExp: Generator = (rng, d) => {
+  if (d === 3) {
+    const b = rng.pick([2, 3, 5]);
+    if (rng.chance(0.5)) {
+      const e = rng.int(2, b === 2 ? 7 : b === 3 ? 4 : 3);
+      return typedQuestion('logExp', `log${toSub(b)} x = ${e}. ¿Cuánto vale x?`, b ** e, `log${toSub(b)} x = ${e} significa que ${b} elevado a ${e} da x. Calcula ${b}^${e}.`, { b, e });
+    }
+    const s = rng.int(1, 3);
+    const e = s + rng.int(1, b === 2 ? 5 : 3);
+    return typedQuestion('logExp', `${b}^(x + ${s}) = ${b ** e}. ¿Cuánto vale x?`, e - s, `Primero descubre a qué exponente hay que elevar ${b} para obtener ${b ** e}: es ${e}. Entonces x + ${s} = ${e}.`, { b, e, s });
+  }
+  const b = rng.pick(d === 1 ? [2, 3, 10] : [2, 3, 5, 10]);
+  const eMax = d === 1 ? 3 : b === 2 ? 6 : b === 5 ? 3 : 4;
+  const e = rng.int(d === 1 ? 1 : 2, eMax);
+  const asExp = d === 2 && rng.chance(0.5);
+  const prompt = asExp ? `${b}^x = ${b ** e}. ¿Cuánto vale x?` : `log${toSub(b)} ${b ** e} = ?`;
+  const { choices, answer } = buildChoices(rng, e, [e + 1, e - 1, b * e, b ** e, b + e, e + 2], { min: 1, max: 100 });
+  return {
+    skillId: 'logExp',
+    prompt,
+    choices,
+    answer,
+    hint: `El logaritmo en base ${b} responde: ¿a qué exponente elevo ${b} para obtener el número? Prueba ${b}, ${b * b}, ${b ** 3}…`,
+    meta: { b, e },
+  };
+};
+
+const seq: Generator = (rng, d) => {
+  const a1 = rng.int(1, 9);
+  const step = rng.int(2, 7);
+  const at = (n: number): number => a1 + (n - 1) * step;
+  if (d === 1) {
+    const result = at(5);
+    const { choices, answer } = buildChoices(rng, result, [result + 1, result - 1, at(4), result + step, at(5) + a1], { min: 1, max: 100 });
+    return {
+      skillId: 'seq',
+      prompt: `${at(1)}, ${at(2)}, ${at(3)}, ${at(4)}, … ¿Cuál es el siguiente número?`,
+      choices,
+      answer,
+      hint: `Mira cuánto sube de un número al siguiente (${step}) y súmalo al último.`,
+      meta: { a1, step },
+    };
+  }
+  if (d === 2) {
+    const n = rng.int(8, 12);
+    const result = at(n);
+    const { choices, answer } = buildChoices(rng, result, [at(n) + step, at(n - 1) - step + a1, at(n) - a1, n * step, a1 + n * step, at(n - 1)], { min: 1, max: 200 });
+    return {
+      skillId: 'seq',
+      prompt: `${at(1)}, ${at(2)}, ${at(3)}, … ¿Cuánto vale el término número ${n}?`,
+      choices,
+      answer,
+      hint: `Al primer término le sumas ${step} una vez menos que el número del término: ${a1} + ${n - 1} × ${step}.`,
+      meta: { a1, step, n },
+    };
+  }
+  if (rng.chance(0.5)) {
+    const a = rng.int(1, 4);
+    const r = rng.int(2, 3);
+    const n = rng.int(4, 6);
+    return typedQuestion('seq', `${a}, ${a * r}, ${a * r * r}, … ¿Cuánto vale el término número ${n}?`, a * r ** (n - 1), `Cada término es el anterior × ${r}. Multiplica ${a} por ${r} un total de ${n - 1} veces.`, { a, r, n });
+  }
+  const n = rng.int(6, 10);
+  return typedQuestion('seq', `Suma los primeros ${n} números de la lista ${at(1)}, ${at(2)}, ${at(3)}, … ¿Cuánto da?`, (n * (2 * a1 + (n - 1) * step)) / 2, 'Escribe los términos uno por uno y suma. Truco: primer término + último, por la cantidad de términos, entre 2.', { a1, step, n });
+};
+
+const counting: Generator = (rng, d) => {
+  if (d === 1) {
+    const a = rng.int(2, 7);
+    const b = rng.int(2, 7);
+    const { choices, answer } = buildChoices(rng, a * b, [a + b, a * b + a, a * b - b, a * b + 1, a * b - 1], { min: 2, max: 60 });
+    return {
+      skillId: 'counting',
+      prompt: `Tienes ${a} camisas y ${b} pantalones. ¿Cuántos conjuntos distintos puedes armar?`,
+      choices,
+      answer,
+      hint: `Cada camisa se combina con todos los pantalones: ${a} × ${b}.`,
+      meta: { a, b },
+    };
+  }
+  if (d === 2) {
+    const n = rng.int(3, 6);
+    let f = 1;
+    for (let i = 2; i <= n; i++) f *= i;
+    const { choices, answer } = buildChoices(rng, f, [n * n, n * (n - 1), f + n, f - n, 2 * n, f / n], { min: 2, max: 1000 });
+    return {
+      skillId: 'counting',
+      prompt: `¿De cuántas maneras se pueden ordenar ${n} libros en un estante?`,
+      choices,
+      answer,
+      hint: `Para el primer lugar hay ${n} libros, para el segundo ${n - 1}, y así hasta 1: multiplica ${Array.from({ length: n }, (_, i) => n - i).join(' × ')}.`,
+      meta: { n },
+    };
+  }
+  const kind = rng.pick(['comb', 'perm3', 'perm2']);
+  if (kind === 'comb') {
+    const n = rng.int(5, 10);
+    const k = rng.int(2, 3);
+    const value = k === 2 ? (n * (n - 1)) / 2 : (n * (n - 1) * (n - 2)) / 6;
+    return typedQuestion('counting', `De un grupo de ${n} estudiantes se elegirá un comité de ${k}. ¿Cuántos comités distintos se pueden formar?`, value, `Aquí el orden no importa. Cuenta las formas con orden (${k === 2 ? `${n} × ${n - 1}` : `${n} × ${n - 1} × ${n - 2}`}) y divide entre las formas de ordenar ${k} personas (${k === 2 ? '2' : '6'}).`, { n, k });
+  }
+  if (kind === 'perm3') {
+    const n = rng.int(5, 9);
+    return typedQuestion('counting', `En una carrera de ${n} corredores se premia al primero, al segundo y al tercero. ¿De cuántas maneras pueden quedar los premiados?`, n * (n - 1) * (n - 2), `Aquí el orden sí importa: ${n} opciones para el primero, ${n - 1} para el segundo y ${n - 2} para el tercero.`, { n });
+  }
+  const n = rng.int(5, 12);
+  return typedQuestion('counting', `Se elegirá un presidente y un secretario entre ${n} personas. ¿De cuántas maneras se puede hacer?`, n * (n - 1), `Hay ${n} opciones para presidente y, una vez elegido, ${n - 1} para secretario.`, { n });
+};
+
+const derivative: Generator = (rng, d) => {
+  const t = rng.int(1, d === 3 ? 5 : 6);
+  if (d === 1) {
+    const n = rng.int(2, 4);
+    const value = n * t ** (n - 1);
+    const { choices, answer } = buildChoices(rng, value, [t ** n, n * t ** n, n * t, (n - 1) * t ** (n - 1), n + t, value + n], { min: 1, max: 600 });
+    return {
+      skillId: 'derivative',
+      prompt: `f(x) = x${toSup(n)}. ¿Cuánto vale f'(${t})?`,
+      choices,
+      answer,
+      hint: `La derivada de xⁿ es n·xⁿ⁻¹. Aquí f'(x) = ${n}x${n - 1 === 1 ? '' : toSup(n - 1)}; cambia x por ${t}.`,
+      meta: { n, t },
+    };
+  }
+  if (d === 2) {
+    const a = rng.int(1, 6);
+    const b = rng.int(1, 9);
+    const c = rng.chance(0.5) ? rng.int(1, 9) : 0;
+    const value = 2 * a * t + b;
+    const fx = `${mono(a, 2)} + ${mono(b, 1)}${c ? ` + ${c}` : ''}`;
+    const { choices, answer } = buildChoices(rng, value, [a * t * t + b * t, 2 * a * t, a * t + b, value + c + 1, value + 1, value - 1], { min: 1, max: 400 });
+    return {
+      skillId: 'derivative',
+      prompt: `f(x) = ${fx}. ¿Cuánto vale f'(${t})?`,
+      choices,
+      answer,
+      hint: 'Deriva término por término: ax² se vuelve 2ax, bx se vuelve b y un número suelto desaparece. Después cambia x por el número.',
+      meta: { a, b, c, t },
+    };
+  }
+  const a = rng.int(1, 4);
+  const b = rng.int(1, 6);
+  const c = rng.int(1, 9);
+  const e = rng.chance(0.5) ? rng.int(1, 9) : 0;
+  const fx = `${mono(a, 3)} + ${mono(b, 2)} + ${mono(c, 1)}${e ? ` + ${e}` : ''}`;
+  return typedQuestion('derivative', `f(x) = ${fx}. ¿Cuánto vale f'(${t})?`, 3 * a * t * t + 2 * b * t + c, 'Deriva término por término: ax³ se vuelve 3ax², bx² se vuelve 2bx, cx se vuelve c, y un número suelto desaparece. Después cambia x por el número.', { a, b, c, e, t });
+};
+
 /* ───────────── Registro ───────────── */
 
 export const SKILLS: Skill[] = [
@@ -1459,6 +1848,16 @@ export const SKILLS: Skill[] = [
   { id: 'expand', name: 'Quitar paréntesis', emoji: '🛡️', tip: 'El número de afuera multiplica a todo lo que hay dentro del paréntesis.', generate: expand },
   { id: 'factor', name: 'Factorizar', emoji: '🧩', tip: 'Busca dos números que multiplicados den el último y sumados den el del medio.', generate: factor },
   { id: 'quadratic', name: 'Ecuaciones cuadráticas', emoji: '👑', tip: 'Un producto es 0 cuando uno de sus factores es 0.', generate: quadratic },
+  { id: 'linearFn', name: 'Funciones lineales', emoji: '⚙️', tip: 'Una función es una máquina: entra un número, cambias la x por él y sale el resultado.', generate: linearFn },
+  { id: 'slope', name: 'Pendiente de una recta', emoji: '📐', tip: 'Pendiente = lo que sube o baja y, entre lo que avanza x.', generate: slope },
+  { id: 'lineCuts', name: 'Cortes de una recta', emoji: '🧭', tip: 'En y = mx + b, la recta corta el eje y en b. Para el eje x, haz y = 0.', generate: lineCuts },
+  { id: 'exponents', name: 'Leyes de los exponentes', emoji: '⚡', tip: 'Multiplicar: sumas exponentes. Dividir: restas. Potencia de potencia: multiplicas.', generate: exponents },
+  { id: 'parabola', name: 'Parábolas y su vértice', emoji: '🌈', tip: 'El vértice es el punto más bajo (o más alto) de la parábola.', generate: parabola },
+  { id: 'trig', name: 'Trigonometría del triángulo rectángulo', emoji: '⛺', tip: 'sen = opuesto ÷ hipotenusa, cos = adyacente ÷ hipotenusa, tan = opuesto ÷ adyacente.', generate: trig },
+  { id: 'logExp', name: 'Logaritmos y exponenciales', emoji: '🧊', tip: 'log en base b de un número es el exponente al que elevas b para obtenerlo.', generate: logExp },
+  { id: 'seq', name: 'Progresiones', emoji: '🥾', tip: 'Aritmética: sumas siempre lo mismo. Geométrica: multiplicas siempre por lo mismo.', generate: seq },
+  { id: 'counting', name: 'Conteo y combinaciones', emoji: '🏕️', tip: 'Si el orden importa, multiplica las opciones; si no importa, divide entre las formas de ordenar.', generate: counting },
+  { id: 'derivative', name: 'Derivadas básicas', emoji: '🏔️', tip: 'La derivada de xⁿ es n·xⁿ⁻¹; un número suelto desaparece.', generate: derivative },
 ];
 
 const BY_ID = new Map(SKILLS.map((s) => [s.id, s]));

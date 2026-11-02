@@ -320,6 +320,148 @@ function solve(q: Question): string {
       if (ask === 'menor') return String(Math.min(...roots));
       return String(roots.find((v) => v > 0));
     }
+    case 'linearFn': {
+      const f = /^f\(x\) = (\d+)x ([+−]) (\d+)\. /.exec(q.prompt) as RegExpExecArray;
+      const fn = (x: number): number => Number(f[1]) * x + (f[2] === '−' ? -1 : 1) * Number(f[3]);
+      let r: RegExpExecArray | null;
+      if ((r = /¿Cuánto vale f\((\d+)\) \+ f\((\d+)\)\?$/.exec(q.prompt))) return String(fn(Number(r[1])) + fn(Number(r[2])));
+      if ((r = /Si f\(x\) = (\d+), ¿cuánto vale x\?$/.exec(q.prompt))) {
+        for (let x = 0; x <= 80; x++) if (fn(x) === Number(r[1])) return String(x);
+        throw new Error(`sin solución: ${q.prompt}`);
+      }
+      r = /¿Cuánto vale f\((\d+)\)\?$/.exec(q.prompt) as RegExpExecArray;
+      return String(fn(Number(r[1])));
+    }
+    case 'slope': {
+      const r = /\((\d+), (\d+)\) y \((\d+), (\d+)\)/.exec(q.prompt) as RegExpExecArray;
+      const [x1, y1, x2, y2] = r.slice(1).map(Number) as [number, number, number, number];
+      const m = (y2 - y1) / (x2 - x1);
+      assert.ok(Number.isInteger(m) && m !== 0, `pendiente entera: ${q.prompt}`);
+      return fmt(m);
+    }
+    case 'lineCuts': {
+      let r: RegExpExecArray | null;
+      if ((r = /^En y = (\d+)x \+ (\d+), ¿cuál es (la pendiente|el valor de y donde la recta corta al eje y)\?$/.exec(q.prompt))) return r[3] === 'la pendiente' ? r[1] as string : r[2] as string;
+      r = /recta y = (−?)(\d+)x ([+−]) (\d+) al eje x\?$/.exec(q.prompt) as RegExpExecArray;
+      const a = (r[1] === '−' ? -1 : 1) * Number(r[2]);
+      const b = (r[3] === '−' ? -1 : 1) * Number(r[4]);
+      for (let x = 1; x <= 60; x++) if (a * x + b === 0) return String(x);
+      throw new Error(`sin corte entero: ${q.prompt}`);
+    }
+    case 'exponents': {
+      const unsup = (t: string): number => Number([...t].map((c) => '⁰¹²³⁴⁵⁶⁷⁸⁹'.indexOf(c)).join(''));
+      const mono = (t: string): [number, number] => {
+        const r = /^(\d*)x([⁰¹²³⁴⁵⁶⁷⁸⁹]+)$/.exec(t) as RegExpExecArray;
+        return [r[1] === '' ? 1 : Number(r[1]), unsup(r[2] as string)];
+      };
+      const show = (c: number, e: number): string => `${c === 1 ? '' : c}x${[...String(e)].map((ch) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[Number(ch)]).join('')}`;
+      const text = q.prompt.replace(/ = \?$/, '');
+      let r: RegExpExecArray | null;
+      if ((r = /^\((.+)\)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)$/.exec(text))) {
+        const [c, e] = mono(r[1] as string);
+        const p = unsup(r[2] as string);
+        return show(c ** p, e * p);
+      }
+      if ((r = /^(.+) × (.+)$/.exec(text))) {
+        const [c1, e1] = mono(r[1] as string);
+        const [c2, e2] = mono(r[2] as string);
+        return show(c1 * c2, e1 + e2);
+      }
+      r = /^(.+) ÷ (.+)$/.exec(text) as RegExpExecArray;
+      const [c1, e1] = mono(r[1] as string);
+      const [c2, e2] = mono(r[2] as string);
+      assert.equal(c1 % c2, 0);
+      return show(c1 / c2, e1 - e2);
+    }
+    case 'parabola': {
+      let r: RegExpExecArray | null;
+      let y: (x: number) => number;
+      if ((r = /^y = \(x − (\d+)\)² \+ (\d+)\./.exec(q.prompt))) {
+        const [h, k] = [Number(r[1]), Number(r[2])];
+        y = (x) => (x - h) ** 2 + k;
+      } else {
+        r = /^y = x² − (\d+)x \+ (\d+)\./.exec(q.prompt) as RegExpExecArray;
+        const [b, c] = [Number(r[1]), Number(r[2])];
+        y = (x) => x * x - b * x + c;
+      }
+      let bestX = 0;
+      for (let x = 0; x <= 40; x++) if (y(x) < y(bestX)) bestX = x;
+      return String(q.prompt.includes('valor de x') ? bestX : y(bestX));
+    }
+    case 'trig': {
+      let r: RegExpExecArray | null;
+      if ((r = /(sen|cos) θ = (\d+)\/(\d+) y la hipotenusa mide (\d+)\./.exec(q.prompt))) {
+        const k = Number(r[4]) / Number(r[3]);
+        assert.ok(Number.isInteger(k));
+        return String(k * Number(r[2]));
+      }
+      r = /catetos de (\d+) y (\d+), e hipotenusa de (\d+)\. Si θ es el ángulo opuesto al cateto de (\d+), ¿cuánto vale (sen|cos|tan) θ\?/.exec(q.prompt) as RegExpExecArray;
+      const [a, b, c, opp] = r.slice(1, 5).map(Number) as [number, number, number, number];
+      assert.equal(a * a + b * b, c * c, 'terna pitagórica');
+      const adj = opp === a ? b : a;
+      return r[5] === 'sen' ? `${opp}/${c}` : r[5] === 'cos' ? `${adj}/${c}` : `${opp}/${adj}`;
+    }
+    case 'logExp': {
+      const fromSub = (t: string): number => Number([...t].map((c) => '₀₁₂₃₄₅₆₇₈₉'.indexOf(c)).join(''));
+      const expOf = (b: number, v: number): number => {
+        for (let e = 0; e <= 12; e++) if (b ** e === v) return e;
+        throw new Error(`no es potencia: ${q.prompt}`);
+      };
+      let r: RegExpExecArray | null;
+      if ((r = /^log([₀-₉]+) (\d+) = \?$/.exec(q.prompt))) return String(expOf(fromSub(r[1] as string), Number(r[2])));
+      if ((r = /^(\d+)\^x = (\d+)\./.exec(q.prompt))) return String(expOf(Number(r[1]), Number(r[2])));
+      if ((r = /^log([₀-₉]+) x = (\d+)\./.exec(q.prompt))) return String(fromSub(r[1] as string) ** Number(r[2]));
+      r = /^(\d+)\^\(x \+ (\d+)\) = (\d+)\./.exec(q.prompt) as RegExpExecArray;
+      return String(expOf(Number(r[1]), Number(r[3])) - Number(r[2]));
+    }
+    case 'seq': {
+      const head = q.prompt.replace(/^Suma los primeros \d+ números de la lista /, '');
+      const nums = (head.split('…')[0] as string).split(',').map((t) => t.trim()).filter(Boolean).map(Number);
+      let r: RegExpExecArray | null;
+      if ((r = /^Suma los primeros (\d+) /.exec(q.prompt))) {
+        const diff = (nums[1] as number) - (nums[0] as number);
+        let total = 0;
+        for (let i = 0; i < Number(r[1]); i++) total += (nums[0] as number) + i * diff;
+        return String(total);
+      }
+      if (/siguiente número/.test(q.prompt)) return String((nums[nums.length - 1] as number) + ((nums[1] as number) - (nums[0] as number)));
+      const n = Number(/término número (\d+)/.exec(q.prompt)?.[1]);
+      const [n1, n2, n3] = nums as [number, number, number];
+      if (n2 - n1 === n3 - n2) return String(n1 + (n - 1) * (n2 - n1));
+      assert.equal(n2 * n2, n1 * n3, 'progresión geométrica');
+      return String(n1 * (n2 / n1) ** (n - 1));
+    }
+    case 'counting': {
+      let r: RegExpExecArray | null;
+      if ((r = /(\d+) camisas y (\d+) pantalones/.exec(q.prompt))) return String(Number(r[1]) * Number(r[2]));
+      if ((r = /ordenar (\d+) libros/.exec(q.prompt))) return String(Array.from({ length: Number(r[1]) }, (_, i) => i + 1).reduce((x, y) => x * y, 1));
+      if ((r = /grupo de (\d+) estudiantes se elegirá un comité de (\d+)\./.exec(q.prompt))) {
+        const [n, k] = [Number(r[1]), Number(r[2])];
+        let num = 1;
+        let den = 1;
+        for (let i = 0; i < k; i++) {
+          num *= n - i;
+          den *= i + 1;
+        }
+        return String(num / den);
+      }
+      if ((r = /carrera de (\d+) corredores/.exec(q.prompt))) return String(Number(r[1]) * (Number(r[1]) - 1) * (Number(r[1]) - 2));
+      r = /entre (\d+) personas/.exec(q.prompt) as RegExpExecArray;
+      return String(Number(r[1]) * (Number(r[1]) - 1));
+    }
+    case 'derivative': {
+      const r = /^f\(x\) = (.+)\. ¿Cuánto vale f'\((\d+)\)\?$/.exec(q.prompt) as RegExpExecArray;
+      const t = Number(r[2]);
+      let total = 0;
+      for (const term of (r[1] as string).split(' + ')) {
+        const m = /^(\d*)x([⁰¹²³⁴⁵⁶⁷⁸⁹]*)$/.exec(term);
+        if (!m) continue; // un número suelto no aporta
+        const c = m[1] === '' ? 1 : Number(m[1]);
+        const e = m[2] === '' ? 1 : Number([...(m[2] as string)].map((ch) => '⁰¹²³⁴⁵⁶⁷⁸⁹'.indexOf(ch)).join(''));
+        total += c * e * t ** (e - 1);
+      }
+      return String(total);
+    }
     default:
       throw new Error(`sin solucionador para ${q.skillId}`);
   }
@@ -528,7 +670,7 @@ test('razones: la respuesta es un entero y el nivel 3 siempre pide buscar el val
 });
 
 test('respuesta escrita: solo el nivel 3 de las ecuaciones y los descuentos; los demás niveles eligen', () => {
-  for (const skill of ['eq1', 'eq2', 'discount', 'eqBoth', 'system', 'quadratic']) {
+  for (const skill of ['eq1', 'eq2', 'discount', 'eqBoth', 'system', 'quadratic', 'linearFn', 'lineCuts', 'parabola', 'trig', 'logExp', 'seq', 'counting', 'derivative']) {
     for (let seed = 1; seed <= 100; seed++) {
       assert.equal(generateQuestion(skill, createRng(seed), 3).input, 'number', skill);
       assert.equal(generateQuestion(skill, createRng(seed), 1).input, undefined, skill);
@@ -566,4 +708,25 @@ test('quitar paréntesis: la coincidencia de errores típicos nunca iguala a la 
       assert.ok(q.choices.every((c) => /^[1-9]\d*x|^x/.test(c)), `${q.prompt}: ${q.choices}`);
     }
   }
+});
+
+test('exponentes: los exponentes del enunciado y de la respuesta caben en una sola cifra (se leen en voz alta)', () => {
+  for (const d of DIFFICULTIES) {
+    for (let seed = 1; seed <= 300; seed++) {
+      const q = generateQuestion('exponents', createRng(seed), d);
+      assert.equal(q.choices.length, 4, q.prompt);
+      assert.ok(!/[⁰¹²³⁴⁵⁶⁷⁸⁹]{2,}/.test(q.prompt), `exponente de dos cifras en el enunciado: ${q.prompt}`);
+      assert.ok(!/[⁰¹²³⁴⁵⁶⁷⁸⁹]{2,}/.test(q.answer), `exponente de dos cifras en la respuesta: ${q.answer}`);
+    }
+  }
+});
+
+test('pendiente: las opciones usan el signo menos tipográfico y nunca repiten la respuesta', () => {
+  let negatives = 0;
+  for (let seed = 1; seed <= 300; seed++) {
+    const q = generateQuestion('slope', createRng(seed), 3);
+    if (q.answer.startsWith('−')) negatives++;
+    assert.ok(q.choices.every((c) => !c.includes('-')), q.choices.join());
+  }
+  assert.ok(negatives > 50, 'el nivel 3 incluye pendientes negativas');
 });
