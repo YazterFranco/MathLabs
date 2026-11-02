@@ -303,6 +303,7 @@ function playQuestion(v: ViewState, play: PlayState): string {
     .map((c) => {
       const out = s.eliminated.has(c);
       const cls: string[] = ['choice'];
+      if (c.length > 8) cls.push('is-wide');
       if (out) cls.push('is-out');
       if (fb) {
         if (play.pick === c) cls.push(fb.neutral ? 'is-picked' : fb.correct ? 'is-correct' : 'is-wrong');
@@ -355,7 +356,7 @@ function playQuestion(v: ViewState, play: PlayState): string {
     </header>
     <section class="question card" aria-live="polite">
       ${q.visual ? `<p class="visual" aria-label="Dibujo de la pregunta">${visualHtml(q.visual)}</p>` : ''}
-      <h2 class="prompt">${esc(q.prompt)}</h2>
+      <h2 class="prompt ${q.prompt.length > 34 ? 'is-long' : ''}">${esc(q.prompt)}</h2>
       ${p.settings.voice ? button('speak', '🔊 Escuchar', 'btn-soft btn-small') : ''}
     </section>
     ${powerBar}
@@ -563,7 +564,7 @@ function placementQuestion(v: ViewState, pl: PlacementState): string {
   const locked = pl.phase === 'feedback';
   const choices = q.choices
     .map(
-      (c) => `<li><button type="button" class="choice ${pl.pick === c ? 'is-picked' : ''}" data-action="answer" data-choice="${esc(c)}" ${locked ? 'disabled' : ''}>${esc(c)}</button></li>`,
+      (c) => `<li><button type="button" class="choice ${c.length > 8 ? 'is-wide' : ''} ${pl.pick === c ? 'is-picked' : ''}" data-action="answer" data-choice="${esc(c)}" ${locked ? 'disabled' : ''}>${esc(c)}</button></li>`,
     )
     .join('');
   const pct = Math.round((s.index / s.total) * 100);
@@ -575,7 +576,7 @@ function placementQuestion(v: ViewState, pl: PlacementState): string {
     </header>
     <section class="question card" aria-live="polite">
       ${q.visual ? `<p class="visual" aria-label="Dibujo de la pregunta">${visualHtml(q.visual)}</p>` : ''}
-      <h2 class="prompt">${esc(q.prompt)}</h2>
+      <h2 class="prompt ${q.prompt.length > 34 ? 'is-long' : ''}">${esc(q.prompt)}</h2>
       ${p.settings.voice ? button('speak', '🔊 Escuchar', 'btn-soft btn-small') : ''}
     </section>
     <ul class="choices">${choices}</ul>

@@ -640,6 +640,181 @@ const fractionOf: Generator = (rng, d) => {
   };
 };
 
+/* ───────────── Mundo 6 · Océano Decimal ───────────── */
+
+/** Los decimales se calculan en centésimas (enteros) para no arrastrar errores de coma flotante. */
+const fmtDec = (cents: number): string => {
+  const whole = Math.floor(cents / 100);
+  const frac = cents % 100;
+  if (frac === 0) return String(whole);
+  return `${whole}.${String(frac).padStart(2, '0').replace(/0$/, '')}`;
+};
+
+function decimalChoices(rng: Rng, cents: number, wrongs: number[], step: number): { choices: string[]; answer: string } {
+  const { choices, answer } = buildChoices(rng, cents, wrongs, { min: 1, max: 100_000, step });
+  return { choices: choices.map((c) => fmtDec(Number(c))), answer: fmtDec(Number(answer)) };
+}
+
+const PLACE_NAMES: Array<[one: string, many: string]> = [
+  ['unidad', 'unidades'],
+  ['décima', 'décimas'],
+  ['centésima', 'centésimas'],
+  ['milésima', 'milésimas'],
+];
+const count = (n: number, [one, many]: [string, string]): string => `${n} ${n === 1 ? one : many}`;
+
+const decimalPlace: Generator = (rng, d): Question => {
+  if (d === 3) {
+    const [u, t, h] = sample<number[]>(
+      () => [rng.int(1, 9), rng.int(1, 9), rng.int(1, 9)],
+      ([a, b, c]) => a !== b && b !== c && a !== c,
+    ) as [number, number, number];
+    const pos = rng.int(0, 2);
+    const digit = [u, t, h][pos] as number;
+    const names = [0, 1, 2, 3].map((i) => count(digit, PLACE_NAMES[i] as [string, string]));
+    return {
+      skillId: 'decimalPlace',
+      prompt: `En ${u}.${t}${h}, ¿qué valor tiene el ${digit}?`,
+      choices: rng.shuffle(names),
+      answer: names[pos] as string,
+      hint: 'Después del punto: primero las décimas, luego las centésimas. Antes del punto están las unidades.',
+      meta: { u, t, h, pos, digit },
+    };
+  }
+  const u = rng.int(1, 9);
+  const t = d === 1 ? rng.int(1, 9) : rng.int(0, 9);
+  const h = d === 1 ? 0 : rng.int(1, 9);
+  const v = u * 100 + t * 10 + h;
+  const prompt =
+    d === 1
+      ? `¿Qué número es ${count(u, PLACE_NAMES[0] as [string, string])} y ${count(t, PLACE_NAMES[1] as [string, string])}?`
+      : `¿Qué número es ${count(u, PLACE_NAMES[0] as [string, string])}, ${count(t, PLACE_NAMES[1] as [string, string])} y ${count(h, PLACE_NAMES[2] as [string, string])}?`;
+  const swapped = u * 100 + h * 10 + t;
+  const { choices, answer } = decimalChoices(rng, v, [swapped, v + 10, v - 10, v + 100, v - 100, v + 1], d === 1 ? 10 : 1);
+  return {
+    skillId: 'decimalPlace',
+    prompt,
+    choices,
+    answer,
+    hint: 'Las décimas van justo después del punto; las centésimas, en el siguiente lugar.',
+    meta: { u, t, h },
+  };
+};
+
+const decimalCompare: Generator = (rng, d) => {
+  const count4 = d === 3 ? 4 : 3;
+  let values: number[];
+  if (d === 1) {
+    const whole = rng.int(0, 3) * 100;
+    values = rng.shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9]).slice(0, count4).map((t) => whole + t * 10);
+  } else {
+    // Mezcla décimas y centésimas: 0.5 es mayor que 0.45 aunque 45 sea mayor que 5.
+    const whole = d === 2 ? rng.int(0, 2) * 100 : rng.int(0, 5) * 100;
+    values = sample<number[]>(
+      () => Array.from({ length: count4 }, () => whole + (rng.chance(0.4) ? rng.int(1, 9) * 10 : rng.int(1, 99))),
+      (list) => new Set(list).size === list.length && list.some((v) => v % 10 === 0) && list.some((v) => v % 10 !== 0),
+    );
+  }
+  const mode = d === 1 ? 'max' : rng.pick(['max', 'min']);
+  const best = mode === 'max' ? Math.max(...values) : Math.min(...values);
+  return {
+    skillId: 'decimalCompare',
+    prompt: mode === 'max' ? '¿Cuál número es el mayor?' : '¿Cuál número es el menor?',
+    choices: values.map(fmtDec),
+    answer: fmtDec(best),
+    hint:
+      d === 1
+        ? 'Compara primero las unidades y después las décimas.'
+        : 'No mires cuántas cifras tiene: compara cifra por cifra desde la izquierda. 0.5 es igual a 0.50.',
+    meta: { cents: values, mode },
+  };
+};
+
+const decimalAdd: Generator = (rng, d) => {
+  const sub = d === 3 && rng.chance(0.5);
+  const tenths = (): number => rng.int(1, 99) * 10;
+  const mixed = (): number => (rng.chance(0.5) ? tenths() : rng.int(11, 999));
+  let a: number;
+  let b: number;
+  if (d === 1) {
+    a = tenths();
+    b = tenths();
+  } else {
+    a = sample(mixed, (x) => x % 10 !== 0 || rng.chance(0.3));
+    b = sample(mixed, (x) => x % 10 !== 0 || rng.chance(0.3));
+  }
+  if (sub && a < b) [a, b] = [b, a];
+  if (sub && a === b) a += 15;
+  const result = sub ? a - b : a + b;
+  const { choices, answer } = decimalChoices(rng, result, [result + 10, result - 10, result + 100, result - 100, result + 1, result - 1], d === 1 ? 10 : 5);
+  return {
+    skillId: 'decimalAdd',
+    prompt: `${fmtDec(a)} ${sub ? '−' : '+'} ${fmtDec(b)} = ?`,
+    choices,
+    answer,
+    hint: 'Alinea los puntos: décimas con décimas y centésimas con centésimas. Si falta una cifra, imagina un 0.',
+    meta: { a, b, kind: sub ? 'sub' : 'add' },
+  };
+};
+
+const percent: Generator = (rng, d) => {
+  const p = d === 1 ? rng.pick([50, 10, 100]) : d === 2 ? rng.pick([25, 20, 50, 75, 10]) : rng.pick([5, 15, 30, 40, 60, 90, 25, 75]);
+  const base = 100 / gcd(p, 100);
+  const total = base * rng.int(1, Math.max(1, Math.floor((d === 1 ? 60 : d === 2 ? 120 : 200) / base)));
+  const result = (total * p) / 100;
+  const { choices, answer } = buildChoices(rng, result, [total - result, result + 10, result - 10, p, result * 2, result + 5], { min: 1, max: 400 });
+  const hint =
+    p === 50
+      ? 'El 50 % es la mitad.'
+      : p === 10
+        ? 'El 10 % es dividir entre 10.'
+        : p === 25
+          ? 'El 25 % es la mitad de la mitad.'
+          : p === 100
+            ? 'El 100 % es todo.'
+            : 'Busca primero el 10 % (dividir entre 10) y arma el porcentaje con él.';
+  return { skillId: 'percent', prompt: `${p}% de ${total} = ?`, choices, answer, hint, meta: { p, total } };
+};
+
+function gcd(a: number, b: number): number {
+  return b === 0 ? a : gcd(b, a % b);
+}
+
+const perimeterArea: Generator = (rng, d) => {
+  const kind = d === 1 ? 'area' : d === 2 ? rng.pick(['area', 'perimeter']) : rng.pick(['area', 'perimeter', 'side']);
+  const square = d >= 2 && kind !== 'side' && rng.chance(0.3);
+  const [lo, hi] = byLevel<[number, number]>(d, [2, 6], [2, 10], [3, 12]);
+  const a = rng.int(lo, hi);
+  const b = square ? a : sample(() => rng.int(lo, hi), (x) => x !== a);
+  const area = a * b;
+  const perimeter = 2 * (a + b);
+  let prompt: string;
+  let result: number;
+  let wrongs: number[];
+  let hint: string;
+  if (kind === 'side') {
+    prompt = `El perímetro de un rectángulo es ${perimeter} cm y un lado mide ${a} cm. ¿Cuánto mide el otro lado?`;
+    result = b;
+    wrongs = [perimeter / 2, perimeter - a, b + 1, b - 1, a + b + 1];
+    hint = `Los dos lados distintos suman la mitad del perímetro (${perimeter / 2}). Réstale ${a}.`;
+  } else {
+    const shape = square ? `Un cuadrado tiene lados de ${a} cm.` : `Un rectángulo mide ${a} cm de largo y ${b} cm de ancho.`;
+    if (kind === 'area') {
+      prompt = `${shape} ¿Cuál es su área en cm²?`;
+      result = area;
+      wrongs = [perimeter, a + b, area + a, area - b, area + 2];
+      hint = 'El área es cuántos cuadritos caben adentro: largo × ancho.';
+    } else {
+      prompt = `${shape} ¿Cuál es su perímetro en cm?`;
+      result = perimeter;
+      wrongs = [area, a + b, perimeter + 2, perimeter - 2, a * 2 + b];
+      hint = 'El perímetro es el contorno: suma todos los lados (dos largos y dos anchos).';
+    }
+  }
+  const { choices, answer } = buildChoices(rng, result, wrongs, { min: 1, max: 300 });
+  return { skillId: 'perimeterArea', prompt, choices, answer, hint, meta: { kind, a, b, square: square ? 1 : 0 } };
+};
+
 /* ───────────── Registro ───────────── */
 
 export const SKILLS: Skill[] = [
@@ -668,6 +843,11 @@ export const SKILLS: Skill[] = [
   { id: 'fractionEquiv', name: 'Fracciones equivalentes', emoji: '👯', tip: 'Lo que le hagas al número de abajo, hazlo también al de arriba.', generate: fractionEquiv },
   { id: 'fractionAdd', name: 'Sumar y restar fracciones', emoji: '🌉', tip: 'Con el mismo número abajo, suma o resta solo los de arriba.', generate: fractionAdd },
   { id: 'fractionOf', name: 'Fracción de un número', emoji: '💎', tip: 'Divide entre el de abajo y multiplica por el de arriba.', generate: fractionOf },
+  { id: 'decimalPlace', name: 'Leer decimales', emoji: '🪸', tip: 'Después del punto: primero las décimas y luego las centésimas.', generate: decimalPlace },
+  { id: 'decimalCompare', name: 'Comparar decimales', emoji: '🦑', tip: 'Compara cifra por cifra desde la izquierda; tener más cifras no hace mayor un número.', generate: decimalCompare },
+  { id: 'decimalAdd', name: 'Sumar y restar decimales', emoji: '🚢', tip: 'Alinea los puntos y suma o resta como siempre.', generate: decimalAdd },
+  { id: 'percent', name: 'Porcentajes', emoji: '🏝️', tip: 'El 10 % es dividir entre 10; el 50 %, la mitad; el 25 %, la mitad de la mitad.', generate: percent },
+  { id: 'perimeterArea', name: 'Perímetro y área', emoji: '⚓', tip: 'Perímetro: suma los lados. Área: largo × ancho.', generate: perimeterArea },
 ];
 
 const BY_ID = new Map(SKILLS.map((s) => [s.id, s]));

@@ -24,6 +24,7 @@
 [data-theme='mountain'] { --bg: #4a3c9a; --bg-2: #7a66d6; --soft: #ece8ff; --soft-edge: #cdc4f6; }
 [data-theme='city'] { --bg: #a33f1f; --bg-2: #e07a3a; --soft: #ffeadb; --soft-edge: #f5c9a8; }
 [data-theme='volcano'] { --bg: #4a1f35; --bg-2: #c4452f; --soft: #ffe6e1; --soft-edge: #f2b6ad; }
+[data-theme='ocean'] { --bg: #0a2a66; --bg-2: #2b6fd6; --soft: #e3edff; --soft-edge: #b7cdf5; }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -173,6 +174,7 @@ legend { font-weight: 800; margin-bottom: 6px; padding: 0; }
 .world[data-theme='mountain'] { background: linear-gradient(180deg, #7a66d6, #4a3c9a); }
 .world[data-theme='city'] { background: linear-gradient(180deg, #e07a3a, #a33f1f); }
 .world[data-theme='volcano'] { background: linear-gradient(180deg, #c4452f, #4a1f35); }
+.world[data-theme='ocean'] { background: linear-gradient(180deg, #2b6fd6, #0a2a66); }
 .locked-note { margin: 8px 0 0; opacity: .9; }
 .trail { display: grid; gap: 14px; margin-top: 12px; position: relative; }
 .node { display: grid; grid-template-columns: 76px 1fr; grid-template-areas: 'btn name' 'btn stars'; align-items: center; column-gap: 14px; }
@@ -214,8 +216,11 @@ legend { font-weight: 800; margin-bottom: 6px; padding: 0; }
 .visual { font-size: 1.8rem; line-height: 1.5; margin: 0; word-break: break-word; }
 .vgroup { display: inline-block; margin: 4px; padding: 4px 10px; border: 3px dashed var(--soft-edge); border-radius: 16px; background: var(--soft); }
 .prompt { font-size: 2rem; margin: 0; }
+.prompt.is-long { font-size: 1.35rem; line-height: 1.3; }
 .choices { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .choice { width: 100%; min-height: 72px; border: 0; border-radius: 20px; background: #fff; color: var(--ink); font: inherit; font-size: 1.7rem; font-weight: 900; cursor: pointer; box-shadow: 0 6px 0 rgba(0, 0, 0, .22); padding: 8px; }
+.choice.is-wide { font-size: 1.2rem; line-height: 1.2; }
+.choices li { display: flex; }
 .choice:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 2px 0 rgba(0, 0, 0, .22); }
 .choice:disabled { cursor: default; }
 .choice.is-out { opacity: .25; text-decoration: line-through; }

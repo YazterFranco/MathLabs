@@ -108,6 +108,39 @@ function solve(q: Question): string {
       assert.equal(n('total') % n('den'), 0, 'la fracción debe dar un número entero');
       assert.equal(q.prompt, `${n('n')}/${n('den')} de ${n('total')} = ?`);
       return String((n('total') / n('den')) * n('n'));
+    case 'decimalPlace': {
+      if (m['digit'] !== undefined) {
+        const names = [['unidad', 'unidades'], ['décima', 'décimas'], ['centésima', 'centésimas']];
+        assert.match(q.prompt, new RegExp(`En ${n('u')}\\.${n('t')}${n('h')}, `));
+        return `${n('digit')} ${(names[n('pos')] as string[])[n('digit') === 1 ? 0 : 1]}`;
+      }
+      return String(Number((n('u') * 100 + n('t') * 10 + n('h')) / 100));
+    }
+    case 'decimalCompare': {
+      const cents = m['cents'] as number[];
+      assert.deepEqual(q.choices.map((c) => Math.round(Number(c) * 100)).sort((a, b) => a - b), [...cents].sort((a, b) => a - b));
+      return String(Number((m['mode'] === 'max' ? Math.max(...cents) : Math.min(...cents)) / 100));
+    }
+    case 'decimalAdd': {
+      const sign = m['kind'] === 'sub' ? '−' : '+';
+      assert.equal(q.prompt, `${n('a') / 100} ${sign} ${n('b') / 100} = ?`);
+      return String((m['kind'] === 'sub' ? n('a') - n('b') : n('a') + n('b')) / 100);
+    }
+    case 'percent':
+      assert.equal(q.prompt, `${n('p')}% de ${n('total')} = ?`);
+      assert.equal((n('total') * n('p')) % 100, 0, 'el porcentaje debe dar un entero');
+      return String((n('total') * n('p')) / 100);
+    case 'perimeterArea': {
+      const { a, b } = { a: n('a'), b: n('b') };
+      if (m['square']) assert.equal(a, b);
+      if (m['kind'] === 'area') {
+        assert.match(q.prompt, new RegExp(`${a} cm`));
+        return String(a * b);
+      }
+      if (m['kind'] === 'perimeter') return String(2 * (a + b));
+      assert.match(q.prompt, new RegExp(`es ${2 * (a + b)} cm y un lado mide ${a} cm`));
+      return String(b);
+    }
     default:
       throw new Error(`sin solucionador para ${q.skillId}`);
   }
@@ -231,5 +264,33 @@ test('fracciones: el nivel 1 compara con el mismo denominador y el nivel 2 con e
     assert.ok(f1.filter((_, i) => i % 2 === 1).every((x) => x === f1[1]));
     const f2 = generateQuestion('fractionCompare', createRng(seed), 2).meta['fracs'] as number[];
     assert.ok(f2.filter((_, i) => i % 2 === 0).every((x) => x === f2[0]));
+  }
+});
+
+test('decimales: formato limpio, comparaciones con trampa y sumas alineadas', () => {
+  for (let seed = 1; seed <= 300; seed++) {
+    for (const skill of ['decimalPlace', 'decimalCompare', 'decimalAdd']) {
+      for (const d of DIFFICULTIES) {
+        const q = generateQuestion(skill, createRng(seed), d);
+        for (const c of [...q.choices, q.answer]) {
+          if (/^\d/.test(c) && !c.includes(' ')) assert.match(c, /^\d+(\.\d{1,2})?$/, `${skill}: ${c}`);
+          assert.ok(!/\.\d*0$/.test(c) || !c.includes('.'), `${skill}: sobra un 0 final en ${c}`);
+        }
+      }
+    }
+    const add1 = generateQuestion('decimalAdd', createRng(seed), 1).meta as Record<string, number>;
+    assert.equal((add1['a'] as number) % 10, 0, 'nivel 1: solo décimas');
+    assert.equal((add1['b'] as number) % 10, 0);
+    const sub = generateQuestion('decimalAdd', createRng(seed), 3).meta as Record<string, number | string>;
+    if (sub['kind'] === 'sub') assert.ok((sub['a'] as number) > (sub['b'] as number), 'la resta nunca da negativo');
+  }
+});
+
+test('decimales: en los niveles 2 y 3 siempre hay una trampa de longitud (décimas junto a centésimas)', () => {
+  for (let seed = 1; seed <= 200; seed++) {
+    for (const d of [2, 3] as Difficulty[]) {
+      const cents = generateQuestion('decimalCompare', createRng(seed), d).meta['cents'] as number[];
+      assert.ok(cents.some((c) => c % 10 === 0) && cents.some((c) => c % 10 !== 0));
+    }
   }
 });
