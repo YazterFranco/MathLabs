@@ -24,10 +24,13 @@ export function spokenText(prompt: string): string {
       return Number(num) === 1 ? ` un ${word} ` : ` ${num} ${word} `;
     })
     .replace(/÷/g, ' entre ')
+    .replace(/\$(\d+(?:\.\d+)?)/g, '$1 dólares')
     .replace(/(\d+)\.(\d+)/g, '$1 punto $2')
+    .replace(/[()]/g, ' ')
     .replace(/%/g, ' por ciento ')
     .replace(/cm²/g, ' centímetros cuadrados ')
     .replace(/\bcm\b/g, ' centímetros ')
+    .replace(/²/g, ' al cuadrado ')
     .replace(/\+/g, ' más ')
     .replace(/−/g, ' menos ')
     .replace(/×/g, ' por ')

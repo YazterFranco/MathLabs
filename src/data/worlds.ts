@@ -118,6 +118,21 @@ export const WORLDS: World[] = [
       { id: 'w6r5', name: 'Puerto de las Figuras', emoji: '⚓', skillIds: ['perimeterArea'] },
     ],
   },
+  {
+    id: 7,
+    name: 'Estación Espacial',
+    emoji: '🚀',
+    grade: '6.º grado',
+    ages: '11 a 12 años',
+    theme: 'space',
+    regions: [
+      { id: 'w7r1', name: 'Cabina de Razones', emoji: '🛰️', skillIds: ['ratio'] },
+      { id: 'w7r2', name: 'Órbita de los Negativos', emoji: '❄️', skillIds: ['integerOrder'] },
+      { id: 'w7r3', name: 'Módulo de Energía', emoji: '🔌', skillIds: ['integerAdd'] },
+      { id: 'w7r4', name: 'Sala de Control', emoji: '🎛️', skillIds: ['orderOps'] },
+      { id: 'w7r5', name: 'Taller de Múltiplos', emoji: '🔧', skillIds: ['gcdLcm'] },
+    ],
+  },
 ];
 
 export interface UpcomingWorld {
@@ -129,7 +144,6 @@ export interface UpcomingWorld {
 }
 
 export const UPCOMING_WORLDS: UpcomingWorld[] = [
-  { id: 7, name: 'Estación Espacial', emoji: '🚀', grade: '6.º grado', ages: '11 a 12 años' },
   { id: 8, name: 'Laboratorio', emoji: '🧪', grade: '7.º grado', ages: '12 a 13 años' },
   { id: 9, name: 'Castillo del Álgebra', emoji: '🏯', grade: '8.º y 9.º', ages: '13 a 14 años' },
   { id: 10, name: 'Torre de las Funciones', emoji: '🗼', grade: '10.º y 11.º', ages: '14 a 16 años' },

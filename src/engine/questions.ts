@@ -815,6 +815,201 @@ const perimeterArea: Generator = (rng, d) => {
   return { skillId: 'perimeterArea', prompt, choices, answer, hint, meta: { kind, a, b, square: square ? 1 : 0 } };
 };
 
+/* ───────────── Mundo 7 · Estación Espacial ───────────── */
+
+/** Los negativos usan el signo menos «−» (U+2212), el mismo de las restas, y no el guion. */
+const fmtInt = (n: number): string => (n < 0 ? `−${-n}` : String(n));
+const paren = (n: number): string => (n < 0 ? `(${fmtInt(n)})` : String(n));
+
+function intChoices(rng: Rng, answer: number, wrongs: number[]): { choices: string[]; answer: string } {
+  const { choices, answer: a } = buildChoices(rng, answer, wrongs, { min: -200, max: 200 });
+  return { choices: choices.map((c) => fmtInt(Number(c))), answer: fmtInt(Number(a)) };
+}
+
+const RATIO_PAIRS: Array<[string, string]> = [
+  ['astronautas', 'robots'],
+  ['naves', 'satélites'],
+  ['cohetes', 'planetas'],
+  ['estrellas', 'cometas'],
+];
+const SHOP_ITEMS = ['boletos', 'paquetes', 'cuadernos', 'stickers'];
+
+const ratio: Generator = (rng, d): Question => {
+  const unit = d === 3 || (d === 2 && rng.chance(0.4));
+  if (!unit) {
+    const [aLo, aHi, kHi] = byLevel<[number, number, number]>(d, [1, 3, 4], [2, 5, 6], [2, 5, 6]);
+    const a = rng.int(aLo, aHi);
+    const b = sample(() => rng.int(aLo, aHi + 1), (x) => x !== a);
+    const k = rng.int(2, kHi);
+    const [x, y] = rng.pick(RATIO_PAIRS);
+    const result = b * k;
+    const { choices, answer } = buildChoices(rng, result, [b + k, a * k, result + b, result - b, result + k], { min: 1, max: 100 });
+    return {
+      skillId: 'ratio',
+      prompt: `Por cada ${a} ${x} hay ${b} ${y}. Si hay ${a * k} ${x}, ¿cuántos ${y} hay?`,
+      choices,
+      answer,
+      hint: `${a} ${x} se repiten ${k} veces; repite también los ${b} ${y} ${k} veces.`,
+      meta: { kind: 'scale', a, b, k },
+    };
+  }
+  const n = rng.int(2, 6);
+  const u = rng.int(2, 9);
+  const m = sample(() => rng.int(2, 12), (x) => x !== n);
+  const price = n * u;
+  const result = m * u;
+  const item = rng.pick(SHOP_ITEMS);
+  const { choices, answer } = buildChoices(rng, result, [price + (m - n), result + u, result - u, u + m, price * 2], { min: 1, max: 200 });
+  return {
+    skillId: 'ratio',
+    prompt: `${n} ${item} cuestan $${price}. ¿Cuánto cuestan ${m} ${item}?`,
+    choices,
+    answer,
+    hint: `Busca el precio de 1: $${price} ÷ ${n}. Luego multiplícalo por ${m}.`,
+    meta: { kind: 'unit', n, price, m },
+  };
+};
+
+const integerOrder: Generator = (rng, d) => {
+  const limit = byLevel<number>(d, 5, 12, 30);
+  const nums = sample<number[]>(
+    () => Array.from({ length: 4 }, () => rng.int(-limit, limit)),
+    (list) => new Set(list).size === 4 && list.some((x) => x < 0) && list.some((x) => x >= 0),
+  );
+  const mode = rng.pick(['max', 'min']);
+  const best = mode === 'max' ? Math.max(...nums) : Math.min(...nums);
+  return {
+    skillId: 'integerOrder',
+    prompt: mode === 'max' ? '¿Cuál es el número mayor?' : '¿Cuál es el número menor?',
+    choices: nums.map(fmtInt),
+    answer: fmtInt(best),
+    hint: 'En la recta numérica, los números crecen hacia la derecha. Entre negativos, el más lejos del 0 es el menor.',
+    meta: { nums, mode },
+  };
+};
+
+const integerAdd: Generator = (rng, d) => {
+  let a: number;
+  let b: number;
+  const sub = d === 3 && rng.chance(0.5);
+  if (d === 1) {
+    const big = rng.int(2, 10);
+    const small = rng.int(1, big - 1);
+    [a, b] = rng.chance(0.5) ? [-small, big] : [big, -small];
+  } else {
+    const pick = (): number => rng.pick([-1, 1]) * rng.int(1, d === 2 ? 12 : 20);
+    a = pick();
+    b = pick();
+  }
+  const result = sub ? a - b : a + b;
+  const wrongs = [Math.abs(a) + Math.abs(b), -result, result + 1, result - 1, sub ? a + b : a - b, result + 2];
+  const { choices, answer } = intChoices(rng, result, wrongs);
+  return {
+    skillId: 'integerAdd',
+    prompt: `${fmtInt(a)} ${sub ? '−' : '+'} ${paren(b)} = ?`,
+    choices,
+    answer,
+    hint: sub
+      ? 'Restar un número es sumar su opuesto: a − (−b) es lo mismo que a + b.'
+      : 'Si los signos son distintos, resta los valores y deja el signo del que está más lejos del 0.',
+    meta: { a, b, kind: sub ? 'sub' : 'add' },
+  };
+};
+
+const orderOps: Generator = (rng, d) => {
+  const templates = d === 1 ? [1, 2] : d === 2 ? [3, 4, 5] : [6, 7];
+  const t = rng.pick(templates);
+  const r = (lo: number, hi: number): number => rng.int(lo, hi);
+  let prompt = '';
+  let value = 0;
+  let traps: number[] = [];
+  let meta: Record<string, number> = {};
+  const done = (): boolean => value >= 0 && value <= 300 && traps.every((x) => x !== value);
+  const build = (): void => {
+    const a = r(2, 9);
+    const b = r(2, 9);
+    const c = r(2, 9);
+    const dd = r(2, 6);
+    const e = r(2, 4);
+    meta = { t, a, b, c };
+    if (t === 1) {
+      prompt = `${a} + ${b} × ${c} = ?`;
+      value = a + b * c;
+      traps = [(a + b) * c];
+    } else if (t === 2) {
+      prompt = `${a * b + 5} − ${b} × ${c} = ?`;
+      value = a * b + 5 - b * c;
+      traps = [(a * b + 5 - b) * c];
+    } else if (t === 3) {
+      prompt = `(${a} + ${b}) × ${c} = ?`;
+      value = (a + b) * c;
+      traps = [a + b * c];
+    } else if (t === 4) {
+      prompt = `${a} + ${b} × ${c} − ${dd} = ?`;
+      value = a + b * c - dd;
+      traps = [(a + b) * c - dd];
+      meta = { t, a, b, c, d: dd };
+    } else if (t === 5) {
+      prompt = `${a * e} ÷ ${e} + ${b} × ${c} = ?`;
+      value = a + b * c;
+      traps = [((a * e) / e + b) * c];
+      meta = { t, a, b, c, e };
+    } else if (t === 6) {
+      prompt = `(${a} + ${b}) × ${c} − ${dd * e} ÷ ${e} = ?`;
+      value = (a + b) * c - dd;
+      traps = [((a + b) * c - dd * e) / e, a + b * c - dd];
+      meta = { t, a, b, c, d: dd, e };
+    } else {
+      prompt = `${a}² + ${b} × ${c} = ?`;
+      value = a * a + b * c;
+      traps = [2 * a + b * c, (a * a + b) * c];
+    }
+  };
+  do build();
+  while (!done());
+  const { choices, answer } = buildChoices(rng, value, [...traps, value + 1, value - 1, value + 10, value - 10, value + 2], { min: 0, max: 400 });
+  return {
+    skillId: 'orderOps',
+    prompt,
+    choices,
+    answer,
+    hint: 'Primero los paréntesis y las potencias, luego × y ÷ de izquierda a derecha, y al final + y −.',
+    meta,
+  };
+};
+
+function gcdOf(a: number, b: number): number {
+  return b === 0 ? a : gcdOf(b, a % b);
+}
+
+const gcdLcm: Generator = (rng, d) => {
+  const kind = d === 1 ? 'lcm' : rng.pick(['gcd', 'lcm']);
+  const [a, b] = sample<[number, number]>(
+    () => {
+      if (d === 1) return [rng.int(2, 6), rng.int(2, 6)];
+      if (d === 2) return [rng.int(4, 12), rng.int(4, 12)];
+      return [rng.int(6, 36), rng.int(6, 36)];
+    },
+    ([x, y]) => x !== y && (kind === 'lcm' ? (x * y) / gcdOf(x, y) <= (d === 1 ? 30 : 200) : gcdOf(x, y) > 1 && gcdOf(x, y) < Math.min(x, y)),
+  );
+  const g = gcdOf(a, b);
+  const l = (a * b) / g;
+  const result = kind === 'lcm' ? l : g;
+  const wrongs = kind === 'lcm' ? [a * b, a + b, Math.max(a, b), l * 2, l + a, l - Math.min(a, b)] : [Math.min(a, b), 1, g * 2, a - b, l];
+  const { choices, answer } = buildChoices(rng, result, wrongs, { min: 1, max: 500 });
+  return {
+    skillId: 'gcdLcm',
+    prompt: kind === 'lcm' ? `¿Cuál es el mínimo común múltiplo de ${a} y ${b}?` : `¿Cuál es el máximo común divisor de ${a} y ${b}?`,
+    choices,
+    answer,
+    hint:
+      kind === 'lcm'
+        ? `Escribe los múltiplos de cada uno (${a}, ${a * 2}, ${a * 3}… y ${b}, ${b * 2}, ${b * 3}…) y busca el primero que se repite.`
+        : 'Busca el número más grande que divide a los dos sin dejar resto.',
+    meta: { a, b, kind },
+  };
+};
+
 /* ───────────── Registro ───────────── */
 
 export const SKILLS: Skill[] = [
@@ -848,6 +1043,11 @@ export const SKILLS: Skill[] = [
   { id: 'decimalAdd', name: 'Sumar y restar decimales', emoji: '🚢', tip: 'Alinea los puntos y suma o resta como siempre.', generate: decimalAdd },
   { id: 'percent', name: 'Porcentajes', emoji: '🏝️', tip: 'El 10 % es dividir entre 10; el 50 %, la mitad; el 25 %, la mitad de la mitad.', generate: percent },
   { id: 'perimeterArea', name: 'Perímetro y área', emoji: '⚓', tip: 'Perímetro: suma los lados. Área: largo × ancho.', generate: perimeterArea },
+  { id: 'ratio', name: 'Razones y proporciones', emoji: '🛰️', tip: 'Si multiplicas un lado de la razón por un número, multiplica el otro por el mismo.', generate: ratio },
+  { id: 'integerOrder', name: 'Números negativos', emoji: '❄️', tip: 'En la recta, los números crecen hacia la derecha; el −9 es menor que el −2.', generate: integerOrder },
+  { id: 'integerAdd', name: 'Sumar y restar con signo', emoji: '🔌', tip: 'Signos distintos: resta y deja el signo del mayor. Restar un negativo es sumar.', generate: integerAdd },
+  { id: 'orderOps', name: 'Orden de las operaciones', emoji: '🎛️', tip: 'Paréntesis y potencias primero; luego × y ÷; al final + y −.', generate: orderOps },
+  { id: 'gcdLcm', name: 'Múltiplos y divisores', emoji: '🔧', tip: 'El mínimo común múltiplo es el primer múltiplo que comparten; el máximo común divisor, el mayor que divide a ambos.', generate: gcdLcm },
 ];
 
 const BY_ID = new Map(SKILLS.map((s) => [s.id, s]));

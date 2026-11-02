@@ -25,6 +25,7 @@
 [data-theme='city'] { --bg: #a33f1f; --bg-2: #e07a3a; --soft: #ffeadb; --soft-edge: #f5c9a8; }
 [data-theme='volcano'] { --bg: #4a1f35; --bg-2: #c4452f; --soft: #ffe6e1; --soft-edge: #f2b6ad; }
 [data-theme='ocean'] { --bg: #0a2a66; --bg-2: #2b6fd6; --soft: #e3edff; --soft-edge: #b7cdf5; }
+[data-theme='space'] { --bg: #17102e; --bg-2: #6a2c91; --soft: #f1e6ff; --soft-edge: #d5b9f5; }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -175,6 +176,7 @@ legend { font-weight: 800; margin-bottom: 6px; padding: 0; }
 .world[data-theme='city'] { background: linear-gradient(180deg, #e07a3a, #a33f1f); }
 .world[data-theme='volcano'] { background: linear-gradient(180deg, #c4452f, #4a1f35); }
 .world[data-theme='ocean'] { background: linear-gradient(180deg, #2b6fd6, #0a2a66); }
+.world[data-theme='space'] { background: linear-gradient(180deg, #6a2c91, #17102e); }
 .locked-note { margin: 8px 0 0; opacity: .9; }
 .trail { display: grid; gap: 14px; margin-top: 12px; position: relative; }
 .node { display: grid; grid-template-columns: 76px 1fr; grid-template-areas: 'btn name' 'btn stars'; align-items: center; column-gap: 14px; }

@@ -2,11 +2,11 @@
 
 Juego web de matemáticas para niños, desde preescolar (5 años) hacia secundaria. El niño avanza **solo cuando demuestra dominio**, con potenciadores, combos, mascota y un guardado local.
 
-> Esta versión incluye los **mundos 1 a 6** (preescolar a 5.º grado: 30 regiones y 30 habilidades, hasta tablas, fracciones, decimales, porcentajes, perímetro y área). Los mundos 7 a 11 (hasta 12.º grado) aparecen como «Próximamente».
+> Esta versión incluye los **mundos 1 a 7** (preescolar a 6.º grado: 35 regiones y 35 habilidades, hasta tablas, fracciones, decimales, porcentajes, razones, números negativos y orden de operaciones). Los mundos 8 a 11 (hasta 12.º grado) aparecen como «Próximamente».
 
 ## Cómo se juega
 
-- **Mapa**: 6 mundos, 5 regiones cada uno. Cada región tiene 3 niveles de 8 preguntas y un **Reto del Guardián**.
+- **Mapa**: 7 mundos, 5 regiones cada uno. Cada región tiene 3 niveles de 8 preguntas y un **Reto del Guardián**.
 - **Corazones y combos** (solo en niveles): 3 corazones. Cada 3 aciertos seguidos se activa la **Chispa** (la siguiente vale doble). Cada 5, el **Rayo** devuelve un corazón.
 - **Dificultad adaptativa** (solo en niveles): empieza según el historial de la habilidad (más reto si ya es sólida, más calma si le cuesta). Con 3 aciertos seguidos sube un punto («🚀 Reto extra») y con 2 errores de 3 baja, siempre a ±1 de la dificultad del nivel. El Guardián **no se adapta**: es el examen. Los repasos priorizan lo que más cuesta, y el panel de familias marca con 🔧 las habilidades que conviene reforzar.
 - **Potenciadores**: Lupa (tacha 2 opciones), Pista mágica y Escudo (un error no rompe la racha). Una vez por nivel; se ganan jugando.
@@ -45,7 +45,7 @@ scripts/      build.mjs y serve.mjs
 tests/        pruebas del motor y prueba E2E
 ```
 
-Las pruebas recalculan cada respuesta con un solucionador independiente para 30 habilidades × 3 dificultades × 300 semillas.
+Las pruebas recalculan cada respuesta con un solucionador independiente para 35 habilidades × 3 dificultades × 300 semillas.
 
 ## Publicar en Cloudflare Pages (gratis)
 
@@ -60,4 +60,4 @@ Cada `git push` a `main` vuelve a publicar.
 
 ## Pendiente
 
-Mundos 7 a 11 (razones, enteros, álgebra, funciones…), sincronización en la nube con cuenta de familia (hoy el progreso vive en el dispositivo), y migrar el guardado a IndexedDB si crece.
+Mundos 8 a 11 (expresiones y ecuaciones, álgebra, funciones, trigonometría…), sincronización en la nube con cuenta de familia (hoy el progreso vive en el dispositivo), y migrar el guardado a IndexedDB si crece.

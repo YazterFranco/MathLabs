@@ -141,12 +141,47 @@ function solve(q: Question): string {
       assert.match(q.prompt, new RegExp(`es ${2 * (a + b)} cm y un lado mide ${a} cm`));
       return String(b);
     }
+    case 'ratio':
+      if (m['kind'] === 'scale') {
+        assert.match(q.prompt, new RegExp(`Si hay ${n('a') * n('k')} `));
+        return String(n('b') * n('k'));
+      }
+      assert.equal(n('price') % n('n'), 0, 'el precio unitario debe ser entero');
+      assert.match(q.prompt, new RegExp(`^${n('n')} \\S+ cuestan \\$${n('price')}\\. ¿Cuánto cuestan ${n('m')} `));
+      return String((n('price') / n('n')) * n('m'));
+    case 'integerOrder': {
+      const nums = m['nums'] as number[];
+      assert.deepEqual(q.choices.map(parseInt_).sort((x, y) => x - y), [...nums].sort((x, y) => x - y));
+      return fmt(m['mode'] === 'max' ? Math.max(...nums) : Math.min(...nums));
+    }
+    case 'integerAdd': {
+      const sub = m['kind'] === 'sub';
+      assert.equal(q.prompt, `${fmt(n('a'))} ${sub ? '−' : '+'} ${n('b') < 0 ? `(${fmt(n('b'))})` : n('b')} = ?`);
+      return fmt(sub ? n('a') - n('b') : n('a') + n('b'));
+    }
+    case 'orderOps': {
+      // Evalúa la expresión tal como se ve en pantalla con la precedencia de JavaScript, que es la de la aritmética.
+      const expr = q.prompt.replace(/ = \?$/, '').replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-').replace(/(\d+)²/g, '$1**2');
+      assert.match(expr, /^[\d\s+\-*/()]+$/, 'expresión segura');
+      const value = Function(`"use strict"; return (${expr});`)() as number;
+      assert.ok(Number.isInteger(value) && value >= 0, `resultado entero y no negativo: ${expr} = ${value}`);
+      return String(value);
+    }
+    case 'gcdLcm': {
+      const g = (x: number, y: number): number => (y === 0 ? x : g(y, x % y));
+      const a = n('a');
+      const b = n('b');
+      return String(m['kind'] === 'lcm' ? (a * b) / g(a, b) : g(a, b));
+    }
     default:
       throw new Error(`sin solucionador para ${q.skillId}`);
   }
 }
 
 const DIFFICULTIES: Difficulty[] = [1, 2, 3];
+
+const fmt = (v: number): string => (v < 0 ? `−${-v}` : String(v));
+const parseInt_ = (text: string): number => Number(text.replace('−', '-'));
 
 for (const skill of SKILLS) {
   test(`${skill.id}: la respuesta es correcta, única y está entre las opciones`, () => {
@@ -292,5 +327,48 @@ test('decimales: en los niveles 2 y 3 siempre hay una trampa de longitud (décim
       const cents = generateQuestion('decimalCompare', createRng(seed), d).meta['cents'] as number[];
       assert.ok(cents.some((c) => c % 10 === 0) && cents.some((c) => c % 10 !== 0));
     }
+  }
+});
+
+test('enteros: usan el signo menos «−» y nunca el guion en la pantalla', () => {
+  for (const skill of ['integerOrder', 'integerAdd']) {
+    for (const d of DIFFICULTIES) {
+      for (let seed = 1; seed <= 200; seed++) {
+        const q = generateQuestion(skill, createRng(seed), d);
+        assert.ok(![q.prompt, q.answer, ...q.choices].some((t) => t.includes('-')), `${skill} d${d} seed${seed}`);
+      }
+    }
+  }
+});
+
+test('enteros: el nivel 1 suma con un solo negativo y la resta con negativo aparece en el nivel 3', () => {
+  let negativeSubtrahend = false;
+  for (let seed = 1; seed <= 300; seed++) {
+    const m1 = generateQuestion('integerAdd', createRng(seed), 1).meta as Record<string, number | string>;
+    assert.equal(((m1['a'] as number) < 0 ? 1 : 0) + ((m1['b'] as number) < 0 ? 1 : 0), 1);
+    const m3 = generateQuestion('integerAdd', createRng(seed), 3).meta as Record<string, number | string>;
+    if (m3['kind'] === 'sub' && (m3['b'] as number) < 0) negativeSubtrahend = true;
+  }
+  assert.ok(negativeSubtrahend, 'a − (−b) debe aparecer en el nivel 3');
+});
+
+test('orden de operaciones: el error de ir de izquierda a derecha nunca coincide con la respuesta', () => {
+  for (const d of DIFFICULTIES) {
+    for (let seed = 1; seed <= 300; seed++) {
+      const q = generateQuestion('orderOps', createRng(seed), d);
+      const t = q.meta['t'] as number;
+      if (t === 1 || t === 4) {
+        const { a, b, c } = q.meta as Record<string, number>;
+        assert.notEqual(q.answer, String(((a as number) + (b as number)) * (c as number)), `${q.prompt} cae en la trampa`);
+      }
+      assert.ok(q.choices.length >= 3);
+    }
+  }
+});
+
+test('razones: la respuesta es un entero y el nivel 3 siempre pide buscar el valor unitario', () => {
+  for (let seed = 1; seed <= 200; seed++) {
+    assert.equal(generateQuestion('ratio', createRng(seed), 3).meta['kind'], 'unit');
+    assert.equal(generateQuestion('ratio', createRng(seed), 1).meta['kind'], 'scale');
   }
 });

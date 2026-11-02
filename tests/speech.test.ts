@@ -12,4 +12,7 @@ test('voz: operaciones y fracciones se leen en español', () => {
   assert.equal(spokenText('3.45 + 2.5 = ?'), '3 punto 45 más 2 punto 5 es igual a ?');
   assert.equal(spokenText('25% de 80 = ?'), '25 por ciento de 80 es igual a ?');
   assert.equal(spokenText('Un cuadrado tiene lados de 4 cm. ¿Cuál es su área en cm²?'), 'Un cuadrado tiene lados de 4 centímetros . ¿Cuál es su área en centímetros cuadrados ?');
+  assert.equal(spokenText('−5 + (−8) = ?'), 'menos 5 más menos 8 es igual a ?');
+  assert.equal(spokenText('3² + 4 × 2 = ?'), '3 al cuadrado más 4 por 2 es igual a ?');
+  assert.equal(spokenText('4 boletos cuestan $12.'), '4 boletos cuestan 12 dólares.');
 });
