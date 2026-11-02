@@ -1193,6 +1193,224 @@ const discount: Generator = (rng, d) => {
   return { skillId: 'discount', prompt, choices, answer, hint, meta };
 };
 
+/* ───────────── Mundo 9 · Castillo del Álgebra ───────────── */
+
+const coefX = (n: number): string => (n === 1 ? 'x' : `${n}x`);
+const signed = (n: number): string => (n < 0 ? '−' : '+');
+
+/** Mezcla la respuesta con errores típicos distintos; si faltan, rellena con variaciones. */
+function textChoices(rng: Rng, answer: string, wrongs: string[], fill: (k: number) => string): string[] {
+  const picked: string[] = [];
+  for (const w of rng.shuffle(wrongs)) if (picked.length < 3 && w !== answer && !picked.includes(w) && !w.startsWith('1(')) picked.push(w);
+  for (let k = 1; picked.length < 3 && k < 40; k++) {
+    const extra = fill(k);
+    if (extra !== answer && !picked.includes(extra)) picked.push(extra);
+  }
+  return rng.shuffle([answer, ...picked]);
+}
+
+const eqBoth: Generator = (rng, d) => {
+  const c = rng.int(1, d === 1 ? 3 : 5);
+  const k = rng.int(1, d === 1 ? 4 : 6);
+  const a = c + k;
+  const x = rng.int(2, d === 3 ? 14 : 9);
+  const sub = d === 3 && rng.chance(0.5);
+  const b = d === 1 ? 0 : sub ? rng.int(1, Math.min(12, k * x - 1)) : rng.int(1, 12);
+  const e = sub ? k * x - b : b + k * x;
+  const left = b === 0 ? `${a}x` : `${a}x ${sub ? '−' : '+'} ${b}`;
+  const prompt = `${left} = ${coefX(c)} + ${e}. ¿Cuánto vale x?`;
+  const hint = sub
+    ? `Resta ${coefX(c)} a los dos lados para juntar las x. Después suma ${b} a los dos lados y divide entre ${k}.`
+    : b === 0
+      ? `Resta ${coefX(c)} a los dos lados: quedan ${k === 1 ? 'x' : `${k}x`} = ${e}. Luego divide entre ${k}.`
+      : `Resta ${coefX(c)} a los dos lados para juntar las x. Después resta ${b} y divide entre ${k}.`;
+  const meta = { a, b, c, e, x, sub: sub ? 1 : 0 };
+  if (d === 3) return typedQuestion('eqBoth', prompt, x, hint, meta);
+  const { choices, answer } = buildChoices(rng, x, [x + 1, x - 1, e - b, e + b, e, x + 2, x * 2], { min: 1, max: 100 });
+  return { skillId: 'eqBoth', prompt, choices, answer, hint, meta };
+};
+
+const system: Generator = (rng, d) => {
+  if (d === 1) {
+    const [big, small] = sample<[number, number]>(
+      () => [rng.int(4, 14), rng.int(1, 10)],
+      ([p, q]) => p > q,
+    );
+    const S = big + small;
+    const D = big - small;
+    const askBig = rng.chance(0.5);
+    const result = askBig ? big : small;
+    const { choices, answer } = buildChoices(rng, result, [S / 2, D, S - D, result + 1, result - 1, S], { min: 1, max: 60 });
+    return {
+      skillId: 'system',
+      prompt: `Dos números suman ${S} y su diferencia es ${D}. ¿Cuál es el ${askBig ? 'mayor' : 'menor'}?`,
+      choices,
+      answer,
+      hint: `El mayor es el menor más ${D}. Si a ${S} le restas ${D}, quedan dos números menores iguales: divídelos entre 2.`,
+      meta: { x: big, y: small, S, D },
+    };
+  }
+  const x = rng.int(2, d === 3 ? 12 : 9);
+  const y = rng.int(1, d === 3 ? 12 : 8);
+  const ask = rng.pick(['x', 'y']);
+  const result = ask === 'x' ? x : y;
+  if (d === 2) {
+    const sum = x + y;
+    const diff = Math.abs(x - y);
+    const first = `x + y = ${sum}`;
+    const second = x >= y ? `x − y = ${diff}` : `y − x = ${diff}`;
+    const prompt = `${first}, ${second}. ¿Cuánto vale ${ask}?`;
+    const { choices, answer } = buildChoices(rng, result, [sum, diff, result + 1, result - 1, sum - result + 1, (sum + diff) / 2 + 1], { min: 1, max: 60 });
+    return {
+      skillId: 'system',
+      prompt,
+      choices,
+      answer,
+      hint: 'Suma las dos ecuaciones: la letra que aparece con + y con − desaparece. Resuelve la que queda y luego usa la primera ecuación.',
+      meta: { x, y },
+    };
+  }
+  const doubleX = rng.chance(0.5);
+  const P = doubleX ? 2 * x + y : x + 2 * y;
+  const prompt = `${doubleX ? '2x + y' : 'x + 2y'} = ${P}, x + y = ${x + y}. ¿Cuánto vale ${ask}?`;
+  const hint = doubleX
+    ? 'Resta la segunda ecuación a la primera: 2x − x = x, y la y desaparece. Así sale x; con ella, y.'
+    : 'Resta la segunda ecuación a la primera: 2y − y = y, y la x desaparece. Así sale y; con ella, x.';
+  return typedQuestion('system', prompt, result, hint, { x, y, doubleX: doubleX ? 1 : 0 });
+};
+
+const expand: Generator = (rng, d) => {
+  let prompt: string;
+  let A: number;
+  let B: number;
+  let wrongs: string[];
+  const a = rng.int(2, d === 3 ? 6 : 9);
+  const b = rng.int(2, 9);
+  if (d === 1) {
+    prompt = `${a}(x + ${b}) = ?`;
+    A = a;
+    B = a * b;
+    wrongs = [fmtLin(a, b), fmtLin(1, a * b), fmtLin(a, a + b), fmtLin(a * b, a), fmtLin(a, a * b + 1)];
+  } else if (d === 2) {
+    prompt = `${a}(x − ${b}) = ?`;
+    A = a;
+    B = -a * b;
+    wrongs = [fmtLin(a, -b), fmtLin(a, a * b), fmtLin(1, -a * b), fmtLin(a, -(a + b)), fmtLin(a, -a * b - 1)];
+  } else {
+    const [c, e, op, sg] = sample<[number, number, number, number]>(
+      () => [rng.int(2, 6), rng.int(2, 9), rng.pick([1, -1]), rng.pick([1, -1])],
+      ([cc, , o]) => a + o * cc >= 1,
+    );
+    prompt = `${a}(x + ${b}) ${signed(op)} ${c}(x ${signed(sg)} ${e}) = ?`;
+    A = a + op * c;
+    B = a * b + op * sg * c * e;
+    wrongs = [fmtLin(A, a * b + c * e), fmtLin(A, a * b - c * e), fmtLin(A, -B), fmtLin(a + c, B), fmtLin(A, a * b + op * sg * e), fmtLin(A, B + c)];
+  }
+  const answer = fmtLin(A, B);
+  return {
+    skillId: 'expand',
+    prompt,
+    choices: textChoices(rng, answer, wrongs, (k) => fmtLin(A, B + k)),
+    answer,
+    hint: 'El número de afuera multiplica a cada término del paréntesis, también al segundo. Cuidado con el signo.',
+    meta: { A, B },
+  };
+};
+
+const fmtFactor = (p: number): string => `(x ${signed(p)} ${Math.abs(p)})`;
+const fmtPair = (p: number, q: number): string => (p <= q ? `${fmtFactor(p)}${fmtFactor(q)}` : `${fmtFactor(q)}${fmtFactor(p)}`);
+
+const factor: Generator = (rng, d) => {
+  let prompt: string;
+  let answer: string;
+  let wrongs: string[];
+  let hint: string;
+  if (d === 1) {
+    const [g, p, q] = sample<[number, number, number]>(
+      () => [rng.int(2, 6), rng.int(1, 4), rng.int(1, 7)],
+      ([, pp, qq]) => gcdOf(pp, qq) === 1,
+    );
+    prompt = `Factoriza: ${g * p}x + ${g * q}`;
+    answer = `${g}(${coefX(p)} + ${q})`;
+    wrongs = [`${g}(${coefX(p)} + ${g * q})`, `${g * p}(x + ${q})`, `${p}(${g}x + ${q})`, `${g}(${coefX(p)} − ${q})`, `${g + 1}(${coefX(p)} + ${q})`, `${g}(${coefX(p + 1)} + ${q})`];
+    hint = `Busca el número que divide a ${g * p} y a ${g * q} a la vez, sácalo afuera y deja en el paréntesis lo que queda.`;
+  } else if (d === 2) {
+    const k = rng.int(2, 12);
+    prompt = `Factoriza: x² − ${k * k}`;
+    answer = `(x + ${k})(x − ${k})`;
+    wrongs = [`(x − ${k})(x − ${k})`, `(x + ${k})(x + ${k})`, `(x − ${k * k})(x + 1)`, `(x + ${k})(x − ${k + 1})`, `(x + ${k * k})(x − 1)`];
+    hint = `x² − ${k * k} es una resta de cuadrados: ${k * k} = ${k} × ${k}. Se factoriza como (x + ${k})(x − ${k}).`;
+  } else {
+    const [p, q] = sample<[number, number]>(
+      () => [rng.pick([-1, 1]) * rng.int(1, 9), rng.pick([-1, 1]) * rng.int(1, 9)],
+      ([pp, qq]) => pp + qq !== 0 && (pp < 0 || qq < 0 || rng.chance(0.4)),
+    );
+    const S = p + q;
+    const P = p * q;
+    prompt = `Factoriza: x² ${signed(S)} ${Math.abs(S) === 1 ? '' : Math.abs(S)}x ${signed(P)} ${Math.abs(P)}`;
+    answer = fmtPair(p, q);
+    wrongs = [fmtPair(-p, -q), fmtPair(p, -q), fmtPair(-p, q), fmtPair(p + 1, q), fmtPair(p, q + 1), fmtPair(p - 1, q)].filter((w) => !w.includes('(x + 0)') && !w.includes('(x − 0)'));
+    hint = `Busca dos números que multiplicados den ${P} y sumados den ${S}. Esos son los que van en los paréntesis.`;
+  }
+  return {
+    skillId: 'factor',
+    prompt,
+    choices: textChoices(rng, answer, wrongs, (k) => fmtPair(k + 1, k + 2)),
+    answer,
+    hint,
+    meta: { d },
+  };
+};
+
+const fmtQuad = (S: number, P: number): string => `x² ${signed(S)} ${Math.abs(S) === 1 ? '' : Math.abs(S)}x ${signed(P)} ${Math.abs(P)}`;
+
+const quadratic: Generator = (rng, d) => {
+  if (d <= 2) {
+    const k = rng.int(2, d === 1 ? 12 : 9);
+    const mult = d === 2 && rng.chance(0.5);
+    const m = rng.int(2, 5);
+    const a = rng.int(1, 20);
+    const prompt = d === 1 ? `x² = ${k * k}. ¿Cuánto vale x si es positivo?` : mult ? `${m}x² = ${m * k * k}. ¿Cuánto vale x si es positivo?` : `x² + ${a} = ${k * k + a}. ¿Cuánto vale x si es positivo?`;
+    const hint =
+      d === 1
+        ? `Busca el número que multiplicado por sí mismo da ${k * k}.`
+        : mult
+          ? `Divide los dos lados entre ${m}: x² = ${k * k}. Luego busca el número que multiplicado por sí mismo da ${k * k}.`
+          : `Resta ${a} a los dos lados: x² = ${k * k}. Luego busca el número que multiplicado por sí mismo da ${k * k}.`;
+    const { choices, answer } = buildChoices(rng, k, [k + 1, k - 1, k * k, k * 2, k + 2, m * k], { min: 1, max: 150 });
+    return { skillId: 'quadratic', prompt, choices, answer, hint, meta: { k, d } };
+  }
+  const form = rng.pick(['factored', 'trinomial', 'mixed']);
+  let prompt: string;
+  let result: number;
+  let hint: string;
+  let p: number;
+  let q: number;
+  if (form === 'mixed') {
+    [p, q] = sample<[number, number]>(
+      () => [rng.int(1, 10), rng.int(1, 10)],
+      ([pp, qq]) => pp !== qq,
+    );
+    prompt = `${fmtQuad(q - p, -p * q)} = 0. ¿Cuál es la solución positiva?`;
+    result = p;
+    hint = `Busca dos números que multiplicados den ${-p * q} y sumados den ${q - p}: son −${p} y ${q}. Cada paréntesis igualado a 0 da una solución.`;
+  } else {
+    [p, q] = sample<[number, number]>(
+      () => [rng.int(1, 12), rng.int(1, 12)],
+      ([pp, qq]) => pp < qq,
+    );
+    const big = rng.chance(0.5);
+    result = big ? q : p;
+    const ask = big ? 'mayor' : 'menor';
+    prompt = form === 'factored' ? `(x − ${p})(x − ${q}) = 0. ¿Cuál es la solución ${ask}?` : `${fmtQuad(-(p + q), p * q)} = 0. ¿Cuál es la solución ${ask}?`;
+    hint =
+      form === 'factored'
+        ? `Un producto es 0 cuando un factor es 0: x − ${p} = 0 o x − ${q} = 0.`
+        : `Busca dos números que multiplicados den ${p * q} y sumados den ${p + q}; con ellos armas (x − ${p})(x − ${q}) = 0.`;
+  }
+  return typedQuestion('quadratic', prompt, result, hint, { p, q, form });
+};
+
 /* ───────────── Registro ───────────── */
 
 export const SKILLS: Skill[] = [
@@ -1236,6 +1454,11 @@ export const SKILLS: Skill[] = [
   { id: 'eq1', name: 'Ecuaciones de un paso', emoji: '⚖️', tip: 'Haz lo contrario a lo que le pasó a la x, en los dos lados.', generate: eq1 },
   { id: 'eq2', name: 'Ecuaciones de dos pasos', emoji: '⚗️', tip: 'Primero deshaz la suma o resta; después, la multiplicación o división.', generate: eq2 },
   { id: 'discount', name: 'Descuentos y aumentos', emoji: '🏷️', tip: 'Calcula el porcentaje y réstalo (descuento) o súmalo (aumento) al precio.', generate: discount },
+  { id: 'eqBoth', name: 'Ecuaciones con x en los dos lados', emoji: '🌉', tip: 'Resta la x más pequeña a los dos lados para juntar todas las x en un solo lado.', generate: eqBoth },
+  { id: 'system', name: 'Dos ecuaciones, dos incógnitas', emoji: '🗼', tip: 'Suma o resta las dos ecuaciones para que una letra desaparezca.', generate: system },
+  { id: 'expand', name: 'Quitar paréntesis', emoji: '🛡️', tip: 'El número de afuera multiplica a todo lo que hay dentro del paréntesis.', generate: expand },
+  { id: 'factor', name: 'Factorizar', emoji: '🧩', tip: 'Busca dos números que multiplicados den el último y sumados den el del medio.', generate: factor },
+  { id: 'quadratic', name: 'Ecuaciones cuadráticas', emoji: '👑', tip: 'Un producto es 0 cuando uno de sus factores es 0.', generate: quadratic },
 ];
 
 const BY_ID = new Map(SKILLS.map((s) => [s.id, s]));

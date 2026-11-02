@@ -17,3 +17,9 @@ test('voz: operaciones y fracciones se leen en español', () => {
   assert.equal(spokenText('4 boletos cuestan $12.'), '4 boletos cuestan 12 dólares.');
   assert.equal(spokenText('3x + 2 = 11. ¿Cuánto vale x?'), '3 x más 2 es igual a 11. ¿Cuánto vale x?');
 });
+
+test('voz: los paréntesis del álgebra se leen como factores', () => {
+  assert.equal(spokenText('3(x + 4) = ?'), '3 por el paréntesis x más 4 es igual a ?');
+  assert.equal(spokenText('(x − 3)(x − 7) = 0'), 'x menos 3 por el paréntesis x menos 7 es igual a 0');
+  assert.equal(spokenText('x² − 25'), 'x al cuadrado menos 25');
+});

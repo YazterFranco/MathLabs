@@ -148,6 +148,21 @@ export const WORLDS: World[] = [
       { id: 'w8r5', name: 'Tienda del Laboratorio', emoji: '🏷️', skillIds: ['discount'] },
     ],
   },
+  {
+    id: 9,
+    name: 'Castillo del Álgebra',
+    emoji: '🏯',
+    grade: '8.º y 9.º grado',
+    ages: '13 a 14 años',
+    theme: 'castle',
+    regions: [
+      { id: 'w9r1', name: 'Puente Levadizo', emoji: '🌉', skillIds: ['eqBoth'] },
+      { id: 'w9r2', name: 'Torre Gemela', emoji: '🗼', skillIds: ['system'] },
+      { id: 'w9r3', name: 'Armería de Paréntesis', emoji: '🛡️', skillIds: ['expand'] },
+      { id: 'w9r4', name: 'Taller de Factores', emoji: '🧩', skillIds: ['factor'] },
+      { id: 'w9r5', name: 'Trono de las Raíces', emoji: '👑', skillIds: ['quadratic'] },
+    ],
+  },
 ];
 
 export interface UpcomingWorld {
@@ -159,7 +174,6 @@ export interface UpcomingWorld {
 }
 
 export const UPCOMING_WORLDS: UpcomingWorld[] = [
-  { id: 9, name: 'Castillo del Álgebra', emoji: '🏯', grade: '8.º y 9.º', ages: '13 a 14 años' },
   { id: 10, name: 'Torre de las Funciones', emoji: '🗼', grade: '10.º y 11.º', ages: '14 a 16 años' },
   { id: 11, name: 'Cumbre', emoji: '🏁', grade: '12.º grado', ages: '16 a 17 años' },
 ];

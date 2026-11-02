@@ -215,10 +215,117 @@ function solve(q: Question): string {
       assert.ok(Number.isInteger(amount));
       return String(r[2] === 'sube' ? price + amount : price - amount);
     }
+    case 'eqBoth': {
+      const r = /^(\d+)x(?: ([+−]) (\d+))? = (\d*)x \+ (\d+)\./.exec(q.prompt) as RegExpExecArray;
+      const a = Number(r[1]);
+      const b = r[3] === undefined ? 0 : r[2] === '−' ? -Number(r[3]) : Number(r[3]);
+      const c = r[4] === '' ? 1 : Number(r[4]);
+      const e = Number(r[5]);
+      const x = (e - b) / (a - c);
+      assert.ok(Number.isInteger(x) && x > 0, `solución entera positiva: ${q.prompt}`);
+      assert.equal(a * x + b, c * x + e, 'la x cumple la ecuación');
+      return String(x);
+    }
+    case 'system': {
+      let r: RegExpExecArray | null;
+      if ((r = /suman (\d+) y su diferencia es (\d+)\. ¿Cuál es el (mayor|menor)\?/.exec(q.prompt))) {
+        const S = Number(r[1]);
+        const D = Number(r[2]);
+        assert.equal((S + D) % 2, 0);
+        return String(r[3] === 'mayor' ? (S + D) / 2 : (S - D) / 2);
+      }
+      const eqs = /^(.+), (.+)\. ¿Cuánto vale ([xy])\?$/.exec(q.prompt) as RegExpExecArray;
+      const parse = (text: string): [number, number, number] => {
+        const t = text.replace(/−/g, '-');
+        let cx = 0;
+        let cy = 0;
+        const [lhs, rhs] = t.split(' = ') as [string, string];
+        for (const term of lhs.replace(/ /g, '').match(/[+-]?\d*[xy]/g) as string[]) {
+          const v = term.slice(-1);
+          const num = term.slice(0, -1);
+          const coef = num === '' || num === '+' ? 1 : num === '-' ? -1 : Number(num);
+          if (v === 'x') cx += coef;
+          else cy += coef;
+        }
+        return [cx, cy, Number(rhs)];
+      };
+      const [a1, b1, c1] = parse(eqs[1] as string);
+      const [a2, b2, c2] = parse(eqs[2] as string);
+      const det = a1 * b2 - a2 * b1;
+      assert.notEqual(det, 0);
+      const x = (c1 * b2 - c2 * b1) / det;
+      const y = (a1 * c2 - a2 * c1) / det;
+      assert.ok(Number.isInteger(x) && Number.isInteger(y) && x >= 1 && y >= 1, `solución entera positiva: ${q.prompt}`);
+      return String(eqs[3] === 'x' ? x : y);
+    }
+    case 'expand': {
+      const js = q.prompt
+        .replace(/ = \?$/, '')
+        .replace(/−/g, '-')
+        .replace(/(\d)\(/g, '$1*(');
+      assert.match(js, /^[\dx\s+\-*()]+$/, 'expresión segura');
+      const f = (x: number) => Function('x', `"use strict"; return (${js});`)(x) as number;
+      const B = f(0);
+      const A = f(1) - B;
+      assert.equal(f(5), A * 5 + B, 'es una expresión lineal');
+      assert.ok(A >= 1);
+      return B === 0 ? coefOf(A) : `${coefOf(A)} ${B > 0 ? '+' : '−'} ${Math.abs(B)}`;
+    }
+    case 'factor': {
+      const text = q.prompt.replace('Factoriza: ', '').replace(/−/g, '-');
+      let r: RegExpExecArray | null;
+      const g = (x: number, y: number): number => (y === 0 ? x : g(y, x % y));
+      if ((r = /^(\d+)x \+ (\d+)$/.exec(text))) {
+        const A = Number(r[1]);
+        const B = Number(r[2]);
+        const k = g(A, B);
+        return `${k}(${coefOf(A / k)} + ${B / k})`;
+      }
+      if ((r = /^x² - (\d+)$/.exec(text))) {
+        const k = Math.sqrt(Number(r[1]));
+        assert.ok(Number.isInteger(k));
+        return `(x + ${k})(x − ${k})`;
+      }
+      r = /^x² ([+-]) (\d*)x ([+-]) (\d+)$/.exec(text) as RegExpExecArray;
+      const S = (r[1] === '-' ? -1 : 1) * (r[2] === '' ? 1 : Number(r[2]));
+      const P = (r[3] === '-' ? -1 : 1) * Number(r[4]);
+      const roots: number[] = [];
+      for (let p = -20; p <= 20; p++) for (let q2 = p; q2 <= 20; q2++) if (p + q2 === S && p * q2 === P) roots.push(p, q2);
+      assert.equal(roots.length, 2, `factorización única: ${q.prompt}`);
+      const f2 = (p: number) => `(x ${p < 0 ? '−' : '+'} ${Math.abs(p)})`;
+      return `${f2(roots[0] as number)}${f2(roots[1] as number)}`;
+    }
+    case 'quadratic': {
+      let r: RegExpExecArray | null;
+      const text = q.prompt.replace(/−/g, '-');
+      if ((r = /^x² = (\d+)\./.exec(text))) return String(Math.sqrt(Number(r[1])));
+      if ((r = /^(\d+)x² = (\d+)\./.exec(text))) return String(Math.sqrt(Number(r[2]) / Number(r[1])));
+      if ((r = /^x² \+ (\d+) = (\d+)\./.exec(text))) return String(Math.sqrt(Number(r[2]) - Number(r[1])));
+      let poly: (x: number) => number;
+      if ((r = /^\(x - (\d+)\)\(x - (\d+)\) = 0/.exec(text))) {
+        const p = Number(r[1]);
+        const q2 = Number(r[2]);
+        poly = (x) => (x - p) * (x - q2);
+      } else {
+        r = /^x² ([+-]) (\d*)x ([+-]) (\d+) = 0/.exec(text) as RegExpExecArray;
+        const S = (r[1] === '-' ? -1 : 1) * (r[2] === '' ? 1 : Number(r[2]));
+        const P = (r[3] === '-' ? -1 : 1) * Number(r[4]);
+        poly = (x) => x * x + S * x + P;
+      }
+      const roots: number[] = [];
+      for (let x = -30; x <= 30; x++) if (poly(x) === 0) roots.push(x);
+      assert.equal(roots.length, 2, `dos soluciones enteras: ${q.prompt}`);
+      const ask = /(mayor|menor|positiva)\?$/.exec(text)?.[1];
+      if (ask === 'mayor') return String(Math.max(...roots));
+      if (ask === 'menor') return String(Math.min(...roots));
+      return String(roots.find((v) => v > 0));
+    }
     default:
       throw new Error(`sin solucionador para ${q.skillId}`);
   }
 }
+
+const coefOf = (n: number): string => (n === 1 ? 'x' : `${n}x`);
 
 const DIFFICULTIES: Difficulty[] = [1, 2, 3];
 
@@ -421,7 +528,7 @@ test('razones: la respuesta es un entero y el nivel 3 siempre pide buscar el val
 });
 
 test('respuesta escrita: solo el nivel 3 de las ecuaciones y los descuentos; los demás niveles eligen', () => {
-  for (const skill of ['eq1', 'eq2', 'discount']) {
+  for (const skill of ['eq1', 'eq2', 'discount', 'eqBoth', 'system', 'quadratic']) {
     for (let seed = 1; seed <= 100; seed++) {
       assert.equal(generateQuestion(skill, createRng(seed), 3).input, 'number', skill);
       assert.equal(generateQuestion(skill, createRng(seed), 1).input, undefined, skill);
@@ -436,6 +543,26 @@ test('simplificar: las opciones son expresiones distintas y ninguna empieza en 0
     for (let seed = 1; seed <= 300; seed++) {
       const q = generateQuestion('simplify', createRng(seed), d);
       assert.equal(q.choices.length, 4, `${q.prompt}`);
+      assert.ok(q.choices.every((c) => /^[1-9]\d*x|^x/.test(c)), `${q.prompt}: ${q.choices}`);
+    }
+  }
+});
+
+test('factorizar: las opciones son factorizaciones distintas y la correcta se reconoce al multiplicar', () => {
+  for (const d of DIFFICULTIES) {
+    for (let seed = 1; seed <= 300; seed++) {
+      const q = generateQuestion('factor', createRng(seed), d);
+      assert.equal(q.choices.length, 4, q.prompt);
+      for (const c of q.choices) assert.ok(!c.startsWith('1('), `${q.prompt}: ${c}`);
+    }
+  }
+});
+
+test('quitar paréntesis: la coincidencia de errores típicos nunca iguala a la respuesta', () => {
+  for (const d of DIFFICULTIES) {
+    for (let seed = 1; seed <= 300; seed++) {
+      const q = generateQuestion('expand', createRng(seed), d);
+      assert.equal(q.choices.length, 4, q.prompt);
       assert.ok(q.choices.every((c) => /^[1-9]\d*x|^x/.test(c)), `${q.prompt}: ${q.choices}`);
     }
   }

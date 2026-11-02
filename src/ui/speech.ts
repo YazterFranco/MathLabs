@@ -26,6 +26,8 @@ export function spokenText(prompt: string): string {
     .replace(/÷/g, ' entre ')
     .replace(/\$(\d+(?:\.\d+)?)/g, '$1 dólares')
     .replace(/(\d+)\.(\d+)/g, '$1 punto $2')
+    .replace(/(\d)\(/g, '$1 por el paréntesis ')
+    .replace(/\)\(/g, ' por el paréntesis ')
     .replace(/[()]/g, ' ')
     .replace(/%/g, ' por ciento ')
     .replace(/cm²/g, ' centímetros cuadrados ')
