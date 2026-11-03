@@ -1,5 +1,6 @@
 import type { Achievement } from '../engine/achievements.ts';
 import type { DayKey } from '../engine/dates.ts';
+import type { VersionInfo } from '../engine/update.ts';
 import type { LevelRef, Reward } from '../engine/progress.ts';
 import type { Profile, QuestItem, SaveFile } from '../engine/save.ts';
 import type { ComboEvent, Outcome, Session } from '../engine/session.ts';
@@ -96,4 +97,8 @@ export interface ViewState {
   /** Hora actual (ms): la usan el cronómetro y la cuenta atrás de la energía. */
   nowMs: number;
   summaryWorldId: number | null;
+  /** Versión nueva del APK disponible (solo dentro de la app de Android). */
+  update: VersionInfo | null;
+  native: boolean;
+  apkUrl: string;
 }

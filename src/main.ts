@@ -23,14 +23,18 @@ const fallback = {
   removeItem: (k: string) => void memory.delete(k),
 };
 
+const e2e = params.get('e2e') === '1';
+const capacitor = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
 const app = new App({
   root,
   store: store ?? fallback,
   ...(params.get('seed') && Number.isFinite(seed) ? { rng: createRng(seed) } : {}),
+  native: capacitor?.isNativePlatform?.() === true || (e2e && params.get('native') === '1'),
+  ...(e2e && params.get('appVersion') ? { appVersion: Number(params.get('appVersion')) } : {}),
 });
 
 // Gancho de pruebas: solo existe si la URL trae ?e2e=1.
-if (params.get('e2e') === '1') (window as unknown as { __matemundo: App }).__matemundo = app;
+if (e2e) (window as unknown as { __matemundo: App }).__matemundo = app;
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http') && params.get('e2e') !== '1') {
   navigator.serviceWorker.register('./sw.js').catch(() => {

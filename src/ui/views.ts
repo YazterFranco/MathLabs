@@ -28,6 +28,7 @@ import { msToNextEnergy } from '../engine/energy.ts';
 import { QUESTS, QUEST_BONUS_STARS, QUEST_REWARD, ensureQuests, questText } from '../engine/quests.ts';
 import { MASTERY_EMOJI, MASTERY_LABEL } from '../engine/mastery.ts';
 import { MEDAL_EMOJI, MEDAL_NAME, worldSummary } from '../engine/summary.ts';
+import { APP_VERSION_NAME } from '../data/build.ts';
 import { CHEST_ENERGY, nextStep } from '../engine/progress.ts';
 import { SPEED_BONUS, formatClock, liveTier } from '../engine/time.ts';
 import { getSkill } from '../engine/questions.ts';
@@ -133,11 +134,13 @@ function welcome(v: ViewState): string {
            ${button('start', 'Cambiar de explorador', 'btn-ghost')}`
         : button('start', '¡Jugar!', 'btn-primary btn-xl')
     }
+    ${updateBanner(v)}
     <ul class="promises">
       <li>Sin anuncios ni compras con dinero real</li>
       <li>Tu progreso se guarda solo en este dispositivo</li>
       ${hasProfiles ? '' : '<li>Solo pedimos un apodo, nunca tu nombre real</li>'}
     </ul>
+    ${v.native ? `<p class="app-version">Versión ${esc(APP_VERSION_NAME)}</p>` : `<a class="android-link" href="${esc(v.apkUrl)}">📱 Descargar la app para Android</a>`}
   </main>`;
 }
 
@@ -232,6 +235,24 @@ function worldBlock(p: Profile, world: World, current: string | null): string {
   </section>`;
 }
 
+/** Aviso de versión nueva de la app de Android: el enlace abre la descarga en el navegador del teléfono. */
+function updateBanner(v: ViewState): string {
+  const u = v.update;
+  if (!u) return '';
+  return `<section class="update-card" role="status" aria-labelledby="update-title">
+    <span class="update-emoji" aria-hidden="true">🆕</span>
+    <div class="update-body">
+      <p class="update-title" id="update-title">¡Nueva versión ${esc(u.versionName)}!</p>
+      ${u.notes ? `<p class="update-notes">${esc(u.notes)}</p>` : ''}
+      <p class="update-hint">Descárgala e instálala encima: tu progreso se conserva.</p>
+      <div class="update-actions">
+        <a class="btn btn-gold btn-small" href="${esc(u.apk)}" data-update-link>⬇️ Actualizar</a>
+        ${button('dismiss-update', 'Después', 'btn-ghost btn-small')}
+      </div>
+    </div>
+  </section>`;
+}
+
 /** Tarjeta grande «Seguir jugando»: lleva directo a lo siguiente del camino. */
 function continueCard(p: Profile): string {
   const step = nextStep(p);
@@ -310,11 +331,13 @@ function map(v: ViewState): string {
       ${button('go-home', '🏠 Inicio', 'btn-ghost btn-small', 'aria-label="Volver al inicio"')}
       <span class="who">${esc(p.avatar)} <strong>${esc(p.nickname)}</strong></span>
       <span class="chips">
+        <button type="button" class="energy-chip music-chip" data-action="toggle-music" aria-pressed="${p.settings.music}" aria-label="${p.settings.music ? 'Apagar la música' : 'Encender la música'}">${p.settings.music ? '🎵' : '🔇'}</button>
         <button type="button" class="energy-chip" data-action="open-energy" aria-label="Energía: ${p.energy} de ${MAX_ENERGY}. Abrir recarga">⚡ ${p.energy}/${MAX_ENERGY}</button>
         <span class="streak" aria-label="Racha de ${p.streak.days} días">🔥 ${p.streak.days}</span>
         <span class="wallet" aria-label="${p.wallet} estrellas">⭐ ${p.wallet}</span>
       </span>
     </header>
+    ${updateBanner(v)}
     <section class="hero-card">
       ${mascot(p, true)}
       <div>
@@ -869,6 +892,7 @@ function parents(v: ViewState): string {
       <div class="toggles">
         <label class="toggle"><input type="checkbox" data-change="toggle-sound" ${p.settings.sound ? 'checked' : ''} /> Sonidos</label>
         <label class="toggle"><input type="checkbox" data-change="toggle-voice" ${p.settings.voice ? 'checked' : ''} /> Leer las preguntas en voz alta</label>
+        <label class="toggle"><input type="checkbox" data-change="toggle-music" ${p.settings.music ? 'checked' : ''} /> Música de fondo</label>
         <label class="toggle"><input type="checkbox" data-change="toggle-vibrate" ${p.settings.vibrate ? 'checked' : ''} /> Vibrar al responder (en el móvil)</label>
       </div>
     </section>
@@ -876,6 +900,15 @@ function parents(v: ViewState): string {
       <p class="muted">Una habilidad pasa a «Competente» con 100% en un nivel o al vencer al Guardián (${GUARDIAN_PASS_COUNT} de ${GUARDIAN_QUESTIONS}). Se confirma como «Dominada» al repasarla días después. Los niveles ajustan el reto según las últimas 10 respuestas (🔧 indica que conviene reforzar).</p>
       ${worlds}</section>
     <section class="card"><h2>Últimas pruebas</h2>${placementSummary(p)}${evHtml}</section>
+    <section class="card"><h2>App para Android</h2>
+      ${
+        v.native
+          ? `<p>Versión instalada: <strong>${esc(APP_VERSION_NAME)}</strong>. Cuando haya una nueva, el mapa mostrará un aviso para descargarla; se instala encima y el progreso se conserva.</p>`
+          : `<p>Instala Matemundo en un teléfono o tableta Android. Funciona sin internet y avisa cuando hay una versión nueva. Al abrir el archivo, Android pedirá permitir «instalar apps desconocidas».</p>
+             <a class="btn btn-soft" href="${esc(v.apkUrl)}">📱 Descargar el APK</a>
+             <p class="muted">El progreso de la web y el de la app son independientes: usa la copia de seguridad para pasarlo.</p>`
+      }
+    </section>
     <section class="card"><h2>Datos</h2>
       <p>Todo se guarda solo en este dispositivo. No hay cuentas ni analíticas.</p>
       <div class="stack">

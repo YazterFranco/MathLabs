@@ -1,21 +1,34 @@
 # Compila el APK de Android con Capacitor: el juego va empaquetado dentro de la app y funciona sin internet.
-# Se ejecuta a mano (pestaña Actions → «APK de Android» → Run workflow) o al subir una etiqueta v*.
-# Cada ejecución publica el APK en la sección Releases del repositorio.
+# Se ejecuta a mano: pestaña Actions → «APK de Android» → Run workflow.
+#
+# Con la llave fija (secretos ANDROID_KEYSTORE_BASE64 y ANDROID_KEYSTORE_PASSWORD) cada versión se firma igual,
+# así se instala encima de la anterior sin perder el progreso. Además se publica en
+# https://matemundo.pages.dev/descargas/matemundo.apk junto con version.json, que la app consulta para avisar
+# de que hay una versión nueva. Sin la llave solo se genera un APK de prueba (no actualizable).
 name: APK de Android
 
 on:
   workflow_dispatch:
-  push:
-    tags: ['v*']
+    inputs:
+      novedades:
+        description: 'Novedades que verá el niño en el aviso (opcional)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
+
+concurrency:
+  group: apk
+  cancel-in-progress: false
 
 jobs:
   apk:
     runs-on: ubuntu-latest
     env:
-      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' }}
+      VERSION_CODE: ${{ github.run_number }}
+      VERSION_NAME: 1.0.${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
 
@@ -28,8 +41,11 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Compilar el juego
-        run: npm run build
+      - name: Compilar el juego (con el número de versión)
+        run: |
+          APP_VERSION_CODE="$VERSION_CODE" APP_VERSION_NAME="$VERSION_NAME" npm run build
+          # Las descargas publicadas no van dentro del APK.
+          rm -rf dist/descargas
 
       - name: Instalar Capacitor (solo en CI, no en el proyecto web)
         run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/assets@3
@@ -38,49 +54,71 @@ jobs:
         run: |
           npx cap add android
           npx capacitor-assets generate --android --iconBackgroundColor '#1c1452' --splashBackgroundColor '#1c1452'
+          sed -i -E "s/versionCode [0-9]+/versionCode $VERSION_CODE/; s/versionName \"[^\"]*\"/versionName \"$VERSION_NAME\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
           npx cap sync android
 
-      - name: Compilar APK (depuración)
-        working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
-
-      - name: Firmar versión de lanzamiento (si hay llave configurada)
+      - name: APK firmado con la llave fija
         if: env.HAS_KEY == 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         working-directory: android
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > release.jks
-          ./gradlew bundleRelease assembleRelease --no-daemon
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/firma.jks"
+          ./gradlew assembleRelease --no-daemon
           BT=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
-          "$ANDROID_HOME/build-tools/$BT/apksigner" sign --ks release.jks --ks-pass env:KEYSTORE_PASSWORD \
-            --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASSWORD \
-            --out app/build/outputs/apk/release/matemundo-release.apk app/build/outputs/apk/release/app-release-unsigned.apk
-          jarsigner -keystore release.jks -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" \
-            app/build/outputs/bundle/release/app-release.aab "$KEY_ALIAS"
-          rm release.jks
+          "$ANDROID_HOME/build-tools/$BT/apksigner" sign --ks "$RUNNER_TEMP/firma.jks" --ks-pass env:KEYSTORE_PASSWORD \
+            --ks-key-alias matemundo --key-pass env:KEYSTORE_PASSWORD \
+            --out "$GITHUB_WORKSPACE/matemundo.apk" app/build/outputs/apk/release/app-release-unsigned.apk
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$GITHUB_WORKSPACE/matemundo.apk" | head -3
+          rm "$RUNNER_TEMP/firma.jks"
 
-      - name: Renombrar APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk matemundo-debug.apk
+      - name: APK de prueba (sin llave fija)
+        if: env.HAS_KEY != 'true'
+        working-directory: android
+        run: |
+          echo "::warning::Faltan los secretos ANDROID_KEYSTORE_BASE64 y ANDROID_KEYSTORE_PASSWORD: este APK no se podrá actualizar encima."
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/matemundo.apk"
 
       - uses: actions/upload-artifact@v4
         with:
           name: matemundo-apk
-          path: |
-            matemundo-debug.apk
-            android/app/build/outputs/apk/release/matemundo-release.apk
-            android/app/build/outputs/bundle/release/app-release.aab
-          if-no-files-found: warn
+          path: matemundo.apk
 
-      - name: Publicar en Releases (descarga directa del APK)
+      - name: Publicar en Releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then TAG="$GITHUB_REF_NAME"; else TAG="v1.0.${{ github.run_number }}"; fi
-          cp matemundo-debug.apk "matemundo-$TAG.apk"
+          TAG="v$VERSION_NAME"
+          cp matemundo.apk "matemundo-$TAG.apk"
           gh release create "$TAG" "matemundo-$TAG.apk" --target "$GITHUB_SHA" --title "Matemundo $TAG" \
-            --notes "APK de Android para instalar directamente (no es la versión de Google Play). Descarga el archivo .apk de abajo." \
+            --notes "APK de Android para instalar directamente. Versión $VERSION_NAME." \
             || gh release upload "$TAG" "matemundo-$TAG.apk" --clobber
+
+      - name: Publicar en matemundo.pages.dev para el aviso de actualización
+        if: env.HAS_KEY == 'true'
+        env:
+          NOVEDADES: ${{ inputs.novedades }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B publicar origin/main
+          mkdir -p public/descargas
+          cp matemundo.apk public/descargas/matemundo.apk
+          node -e '
+            const fs = require("fs");
+            const info = {
+              versionCode: Number(process.env.VERSION_CODE),
+              versionName: process.env.VERSION_NAME,
+              date: new Date().toISOString().slice(0, 10),
+              notes: (process.env.NOVEDADES || "Mejoras y correcciones.").slice(0, 280),
+              apk: "https://matemundo.pages.dev/descargas/matemundo.apk",
+            };
+            fs.writeFileSync("public/descargas/version.json", JSON.stringify(info, null, 2) + "\n");
+          '
+          git add public/descargas
+          git commit -m "APK $VERSION_NAME publicado para descarga"
+          git push origin HEAD:main

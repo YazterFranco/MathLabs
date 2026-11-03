@@ -405,6 +405,20 @@ legend { font-weight: 800; margin-bottom: 6px; padding: 0; }
 .clock.is-ending { background: var(--bad); animation: pulse .8s ease-in-out infinite; }
 .big-score { font-size: 4.6rem; font-weight: 700; line-height: 1; margin: 0; color: var(--primary); text-shadow: 0 5px 0 #ffd2c2; }
 
+/* ── Aviso de actualización y app ── */
+.update-card { display: flex; gap: 12px; align-items: flex-start; text-align: left; background: linear-gradient(135deg, #e9fff4, #fff); border: 3px solid var(--mint); border-radius: 24px; padding: 14px 16px; box-shadow: 0 6px 0 rgba(20, 8, 70, .25); color: var(--ink); width: 100%; animation: pop .4s ease backwards; }
+.update-emoji { font-size: 2rem; line-height: 1; }
+.update-body { display: grid; gap: 4px; min-width: 0; }
+.update-title { font-weight: 700; font-size: 1.15rem; margin: 0; }
+.update-notes, .update-hint { margin: 0; font-size: .92rem; }
+.update-hint { color: var(--ink-soft); }
+.update-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.update-actions .btn-ghost { color: var(--ink); }
+a.btn { text-decoration: none; }
+.android-link { color: #fff; font-weight: 600; opacity: .9; text-underline-offset: 3px; }
+.app-version { color: rgba(255, 255, 255, .7); font-size: .85rem; margin: 0; }
+.music-chip { min-width: 44px; padding-inline: 10px; }
+
 /* ── Logros ── */
 .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .stat-grid li { display: grid; gap: 0; text-align: center; background: var(--soft); border-radius: 18px; padding: 10px 4px; }

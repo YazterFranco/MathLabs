@@ -124,7 +124,7 @@ export interface Profile {
   evidence: EvidenceEntry[];
   /** Resultado de la prueba de nivel (una sola vez por explorador). */
   placement: Placement | null;
-  settings: { sound: boolean; voice: boolean; vibrate: boolean };
+  settings: { sound: boolean; voice: boolean; vibrate: boolean; music: boolean };
   /** Logros conseguidos (ids). */
   achievements: string[];
   stats: Stats;
@@ -198,7 +198,7 @@ export function newProfile(input: NewProfileInput, today: DayKey, id?: string): 
     chestLastDay: null,
     evidence: [],
     placement: null,
-    settings: { sound: true, voice: input.ageBand === '5-6', vibrate: true },
+    settings: { sound: true, voice: input.ageBand === '5-6', vibrate: true, music: true },
     achievements: [],
     stats: emptyStats(),
     quests: null,

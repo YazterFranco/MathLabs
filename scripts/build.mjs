@@ -30,13 +30,24 @@ for (const file of await walk(src)) {
   await writeFile(target, js);
 }
 
+// Versión de la app de Android (la pone el workflow del APK; en la web queda vacía).
+const buildInfo = join(dist, 'js', 'data', 'build.js');
+const code = /^\d+$/.test(process.env.APP_VERSION_CODE ?? '') ? process.env.APP_VERSION_CODE : '';
+const name = /^[0-9A-Za-z.-]+$/.test(process.env.APP_VERSION_NAME ?? '') ? process.env.APP_VERSION_NAME : '';
+let info = await readFile(buildInfo, 'utf8');
+if (code) info = info.replace('__APP_VERSION_CODE__', code);
+if (name) info = info.replaceAll('__APP_VERSION_NAME__', name);
+await writeFile(buildInfo, info);
+
 await cp(join(src, 'styles.css'), join(dist, 'styles.css'));
 await cp(join(root, 'index.html'), join(dist, 'index.html'));
 await cp(join(root, 'public'), dist, { recursive: true });
 
 // El service worker precarga todo lo que se publica (la lista se escribe aquí).
 const files = (await walk(dist)).map((f) => relative(dist, f).split('\\').join('/')).filter((f) => f !== 'sw.js' && f !== '_headers');
-const precache = ['./', ...files.map((f) => `./${f}`)];
+// El APK y su version.json se descargan aparte: no se guardan en la caché del juego.
+const cached = files.filter((f) => !f.startsWith('descargas/') && !f.endsWith('.txt'));
+const precache = ['./', ...cached.map((f) => `./${f}`)];
 const swPath = join(dist, 'sw.js');
 const version = Date.now().toString(36);
 const sw = (await readFile(swPath, 'utf8')).replace('__PRECACHE__', JSON.stringify(precache)).replace('__VERSION__', version);

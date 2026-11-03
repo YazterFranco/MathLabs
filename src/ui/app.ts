@@ -1,5 +1,7 @@
 import { findRegion, LEVELS_PER_REGION, MAX_ENERGY, PLACEMENT_PASS_COUNT, SPRINT_MS, WORLDS } from '../data/worlds.ts';
 import { checkAchievements, noteAnswer } from '../engine/achievements.ts';
+import { APK_URL, APP_VERSION_CODE, VERSION_URL } from '../data/build.ts';
+import { hasUpdate, parseVersionInfo, type VersionInfo } from '../engine/update.ts';
 import { claimQuest, ensureQuests, trackQuests } from '../engine/quests.ts';
 import {
   buildAdaptiveLevel,
@@ -46,6 +48,7 @@ import { MAX_THINK_MS, Session } from '../engine/session.ts';
 import { formatClock, liveTier, parSeconds } from '../engine/time.ts';
 import { POWER_INFO } from '../data/shop.ts';
 import type { PowerKind } from '../engine/types.ts';
+import { Music, trackFor } from './music.ts';
 import { Sound } from './sound.ts';
 import { canSpeak, speak, spokenText, stopSpeaking } from './speech.ts';
 import type { GateState, PlacementState, PlayState, ResultState, Screen, ViewState } from './state.ts';
@@ -63,8 +66,17 @@ export interface AppDeps {
   rng?: Rng;
   now?: () => Date;
   sound?: Sound;
+  music?: Music;
   speech?: SpeechApi;
+  /** Corre dentro de la app de Android (Capacitor). */
+  native?: boolean;
+  /** versionCode de la app instalada (0 en la web). */
+  appVersion?: number;
+  /** Descarga version.json del sitio; se puede sustituir en pruebas. */
+  fetchVersion?: () => Promise<unknown>;
 }
+
+const UPDATE_RECHECK_MS = 6 * 60 * 60 * 1000;
 
 const POWERS: PowerKind[] = ['lupa', 'pista', 'escudo'];
 const IDLE_CUTOFF_MS = 2 * 60 * 1000;
@@ -95,6 +107,7 @@ export class App {
   private readonly rng: Rng;
   private readonly now: () => Date;
   private readonly sound: Sound;
+  private readonly music: Music;
   private readonly speech: SpeechApi;
 
   private saveFile: SaveFile;
@@ -113,6 +126,12 @@ export class App {
   private extraMs = new Map<string, number>();
   private lastRenderedScreen: Screen | null = null;
   private summaryWorldId: number | null = null;
+  private readonly native: boolean;
+  private readonly appVersion: number;
+  private readonly fetchVersion: () => Promise<unknown>;
+  private update: VersionInfo | null = null;
+  private updateDismissed = false;
+  private lastUpdateCheck = 0;
 
   constructor(deps: AppDeps) {
     this.root = deps.root;
@@ -120,6 +139,12 @@ export class App {
     this.rng = deps.rng ?? randomRng();
     this.now = deps.now ?? (() => new Date());
     this.sound = deps.sound ?? new Sound();
+    this.music = deps.music ?? new Music(deps.root.ownerDocument);
+    this.native = deps.native ?? false;
+    this.appVersion = deps.appVersion ?? APP_VERSION_CODE;
+    this.fetchVersion =
+      deps.fetchVersion ??
+      (() => fetch(VERSION_URL, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)));
     this.speech = deps.speech ?? { can: canSpeak, speak, stop: stopSpeaking };
     this.saveFile = loadSave(this.store);
     this.lastTouch = this.now().getTime();
@@ -131,6 +156,11 @@ export class App {
     // Cronómetro del nivel y cuenta atrás de la energía: solo cambian su texto, sin repintar la pantalla.
     this.root.ownerDocument.defaultView?.setInterval(() => this.tickClocks(), 500);
     this.render();
+    // En la app de Android se busca si hay una versión nueva al abrir y al volver a ella (cada 6 horas como mucho).
+    void this.checkUpdate();
+    this.root.ownerDocument.addEventListener('visibilitychange', () => {
+      if (!this.root.ownerDocument.hidden && this.now().getTime() - this.lastUpdateCheck > UPDATE_RECHECK_MS) void this.checkUpdate();
+    });
   }
 
   /* ───────────── Acceso para pruebas ───────────── */
@@ -200,6 +230,21 @@ export class App {
     return null;
   }
 
+  /** Consulta version.json; si hay una versión más nueva que la instalada, el mapa muestra el aviso. */
+  private async checkUpdate(): Promise<void> {
+    if (!this.native || this.appVersion <= 0) return;
+    this.lastUpdateCheck = this.now().getTime();
+    try {
+      const info = parseVersionInfo(await this.fetchVersion(), 'https://matemundo.pages.dev/');
+      if (hasUpdate(info, this.appVersion)) {
+        this.update = info;
+        this.render();
+      }
+    } catch {
+      /* sin internet: se intentará la próxima vez */
+    }
+  }
+
   private tickClocks(): void {
     const p = this.profile;
     if (!p) return;
@@ -252,6 +297,9 @@ export class App {
     return {
       nowMs,
       summaryWorldId: this.summaryWorldId,
+      update: this.updateDismissed ? null : this.update,
+      native: this.native,
+      apkUrl: this.native ? (this.update?.apk ?? APK_URL) : APK_URL,
       screen: this.screen,
       save: this.saveFile,
       profile: p,
@@ -292,11 +340,25 @@ export class App {
       doc.defaultView?.scrollTo?.(0, 0);
     }
     this.lastRenderedScreen = this.screen;
+    this.syncMusic();
+  }
+
+  private syncMusic(): void {
+    const p = this.profile;
+    this.music.enabled = p ? p.settings.music : true;
+    let worldId: number | null = null;
+    const ref = this.play?.ref;
+    if (this.screen === 'placement' && this.placement) worldId = (WORLDS[this.placement.worldIndex]?.id ?? null);
+    else if (this.screen === 'play' && ref && (ref.kind === 'level' || ref.kind === 'guardian')) worldId = findRegion(ref.regionId).world.id;
+    else if (this.regionId) worldId = findRegion(this.regionId).world.id;
+    const pick = trackFor(this.screen, this.screen === 'play' ? (ref?.kind ?? null) : null, worldId);
+    this.music.play(pick.id, pick.shift);
   }
 
   /* ───────────── Eventos ───────────── */
 
   private onClick(e: Event): void {
+    this.music.unlock();
     const el = (e.target as Element).closest<HTMLElement>('[data-action]');
     if (!el || (el as HTMLButtonElement).disabled) return;
     this.dispatch(el.dataset['action'] as string, el);
@@ -322,6 +384,9 @@ export class App {
     } else if (kind === 'toggle-voice' && p) {
       p.settings.voice = (el as HTMLInputElement).checked;
       if (!p.settings.voice) this.speech.stop();
+      this.save();
+    } else if (kind === 'toggle-music' && p) {
+      p.settings.music = (el as HTMLInputElement).checked;
       this.save();
     } else if (kind === 'toggle-vibrate' && p) {
       p.settings.vibrate = (el as HTMLInputElement).checked;
@@ -430,6 +495,16 @@ export class App {
         break;
       case 'open-achievements':
         this.go('achievements');
+        break;
+      case 'dismiss-update':
+        this.updateDismissed = true;
+        break;
+      case 'toggle-music':
+        if (this.profile) {
+          this.profile.settings.music = !this.profile.settings.music;
+          this.save();
+          this.showToast(this.profile.settings.music ? '🎵 Música encendida' : '🔇 Música apagada');
+        }
         break;
       case 'open-summary':
         this.openSummary(Number(id));

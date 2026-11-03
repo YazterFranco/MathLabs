@@ -16,6 +16,7 @@ Juego web de matemáticas para niños, desde preescolar (5 años) hacia secundar
 - **Misiones del día**: tres misiones al día (por ejemplo, «Responde bien 15 preguntas», «Juega un Contrarreloj», «Acierta 5 seguidas»), siempre las mismas durante el día. Cada una da +3 ⭐ y +1 ⚡ al cobrarla; cobrar las tres da un cofre con +5 ⭐ y un poder.
 - **Contrarreloj**: 60 segundos para acertar todo lo posible con lo que el niño ya conoce (las primeras 8 fáciles). Un error no detiene: se ve la respuesta y sigue. Cada acierto vale ⭐ (tope de 15), guarda el récord y no gasta energía.
 - **Logros y «Mi progreso»**: 21 logros a largo plazo (niveles, perfectos, aciertos, rachas, bonos, Guardianes, medallas, dominio…), +5 ⭐ cada uno, con barra de avance. La pantalla muestra aciertos, precisión, niveles, mejor racha, Guardianes y récord.
+- **Música**: tres temas compuestos con Web Audio (mapa, niveles y Contrarreloj), en otra tonalidad en cada mundo, sin archivos de audio. Suena tras el primer toque, se pausa al salir de la app y se apaga con 🎵 en el mapa o en Familias.
 - **Celebración y vibración**: confeti al lograr un nivel perfecto, un récord, un bono Rayo, un logro o un mundo (se apaga con «reducir movimiento»). En el móvil vibra al responder; se desactiva en el panel de familias.
 - **Respuesta escrita**: en el nivel 3 de las habilidades de cálculo (ecuaciones, descuentos, sistemas, funciones, trigonometría, logaritmos, progresiones, conteo, derivadas…), y en sus Guardianes, el niño escribe el resultado en vez de elegirlo (adivinar no sirve). Solo se aceptan números enteros; un texto inválido avisa y no cuenta como intento. La prueba de nivel y los repasos siguen con opciones.
 - **Dificultad adaptativa** (solo en niveles): empieza según el historial de la habilidad (más reto si ya es sólida, más calma si le cuesta). Con 3 aciertos seguidos sube un punto («🚀 Reto extra») y con 2 errores de 3 baja, siempre a ±1 de la dificultad del nivel. El Guardián **no se adapta**: es el examen. Los repasos priorizan lo que más cuesta, y el panel de familias marca con 🔧 las habilidades que conviene reforzar.
@@ -83,7 +84,16 @@ Para publicar cambios después: `npm run deploy`.
 
 El juego se empaqueta con [Capacitor](https://capacitorjs.com/): los archivos van **dentro** de la app, así que funciona sin internet y no necesita configurar dominios. Para un juego infantil también es la vía más segura con las políticas de Google Play para apps de niños (una TWA abre el sitio web dentro de Chrome).
 
-**Opción 1 (sin instalar nada): GitHub Actions.** En el repositorio, pestaña **Actions → «APK de Android» → Run workflow**. En unos 5 minutos el APK queda publicado en **Releases** (`matemundo-v1.0.N.apk`), listo para descargar desde el teléfono; también queda como archivo `matemundo-apk` en la ejecución. Ábrelo en Android (pedirá permitir «instalar apps desconocidas»).
+**Opción 1 (sin instalar nada): GitHub Actions.** En el repositorio, pestaña **Actions → «APK de Android» → Run workflow** (opcionalmente escribe las novedades que verá el niño). En unos 5 minutos:
+
+- el APK firmado queda en **Releases** (`matemundo-v1.0.N.apk`),
+- y se publica en `https://matemundo.pages.dev/descargas/matemundo.apk` junto con `version.json`.
+
+Ábrelo en Android (pedirá permitir «instalar apps desconocidas»).
+
+**Actualizaciones.** Cada compilación se firma con la misma llave y sube el número de versión, así la nueva se instala encima de la anterior **sin perder el progreso**. La app consulta `version.json` al abrirse (y al volver a ella, cada 6 horas como mucho); si hay una versión más nueva, el mapa muestra «¡Nueva versión!» con el botón **Actualizar**, que descarga el APK en el navegador del teléfono. La versión web se actualiza sola y no muestra el aviso.
+
+La llave vive en dos secretos del repositorio (Settings → Secrets and variables → Actions): `ANDROID_KEYSTORE_BASE64` (el archivo `.jks` en base64) y `ANDROID_KEYSTORE_PASSWORD` (alias `matemundo`). Sin ellos el workflow genera un APK de prueba que no se puede actualizar encima. **Guarda una copia de la llave**: si se pierde, las apps instaladas no podrán recibir actualizaciones y habrá que desinstalar.
 
 **Opción 2 (en tu computadora).** Necesitas Node 22, JDK 21 y Android Studio:
 
@@ -98,7 +108,7 @@ npx cap open android      # en Android Studio: Build → Build APK(s)
 
 Los íconos y la pantalla de inicio salen de `assets/` (icono 1024 px, primer plano, fondo y splash).
 
-**Para Google Play** hace falta un APK/AAB **firmado** con tu llave. Crea una vez la llave (`keytool -genkey -v -keystore matemundo.jks -keyalg RSA -keysize 2048 -validity 10000 -alias matemundo`), guárdala en un lugar seguro y añade en GitHub (Settings → Secrets → Actions) `ANDROID_KEYSTORE_BASE64` (el archivo en base64), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` y `ANDROID_KEY_PASSWORD`. Con esos secretos el workflow también genera `matemundo-release.apk` y `app-release.aab` firmados. La cuenta de desarrollador de Google Play cuesta 25 USD (pago único); al ser para niños, hay que completar el formulario de «Familias» y la política de privacidad (el juego no recoge datos: todo queda en el dispositivo).
+**Para Google Play** se sube un AAB firmado (`./gradlew bundleRelease` y firmar con la misma llave). La cuenta de desarrollador de Google Play cuesta 25 USD (pago único); al ser para niños, hay que completar el formulario de «Familias» y la política de privacidad (el juego no recoge datos: todo queda en el dispositivo).
 
 **Alternativa rápida (TWA):** [PWABuilder](https://www.pwabuilder.com/) genera un paquete Android a partir de `https://matemundo.pages.dev`. Abre el sitio en Chrome, pero necesita publicar `/.well-known/assetlinks.json` con la huella de tu llave.
 
