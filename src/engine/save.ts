@@ -57,6 +57,52 @@ export interface Placement {
   scores: number[];
 }
 
+/** Contadores para logros y para «Mi progreso». */
+export interface Stats {
+  answered: number;
+  correct: number;
+  levels: number;
+  perfects: number;
+  speedBonuses: number;
+  rayoBonuses: number;
+  bestStreak: number;
+  sprints: number;
+  sprintBest: number;
+  recharges: number;
+  questsDone: number;
+  guardians: number;
+}
+
+export type QuestId = 'answer' | 'levels' | 'perfect' | 'speed' | 'sprint' | 'streak';
+
+export interface QuestItem {
+  id: QuestId;
+  goal: number;
+  progress: number;
+  claimed: boolean;
+}
+
+export interface QuestDay {
+  day: DayKey;
+  items: QuestItem[];
+  bonusClaimed: boolean;
+}
+
+export const emptyStats = (): Stats => ({
+  answered: 0,
+  correct: 0,
+  levels: 0,
+  perfects: 0,
+  speedBonuses: 0,
+  rayoBonuses: 0,
+  bestStreak: 0,
+  sprints: 0,
+  sprintBest: 0,
+  recharges: 0,
+  questsDone: 0,
+  guardians: 0,
+});
+
 export interface Profile {
   id: string;
   nickname: string;
@@ -78,7 +124,12 @@ export interface Profile {
   evidence: EvidenceEntry[];
   /** Resultado de la prueba de nivel (una sola vez por explorador). */
   placement: Placement | null;
-  settings: { sound: boolean; voice: boolean };
+  settings: { sound: boolean; voice: boolean; vibrate: boolean };
+  /** Logros conseguidos (ids). */
+  achievements: string[];
+  stats: Stats;
+  /** Misiones del día (se renuevan cada día). */
+  quests: QuestDay | null;
   /** Energía ⚡ actual y el instante (ms) desde el que corre la recarga automática. */
   energy: number;
   energyAt: number;
@@ -147,7 +198,10 @@ export function newProfile(input: NewProfileInput, today: DayKey, id?: string): 
     chestLastDay: null,
     evidence: [],
     placement: null,
-    settings: { sound: true, voice: input.ageBand === '5-6' },
+    settings: { sound: true, voice: input.ageBand === '5-6', vibrate: true },
+    achievements: [],
+    stats: emptyStats(),
+    quests: null,
     energy: MAX_ENERGY,
     energyAt: 0,
     medals: [],
@@ -208,6 +262,24 @@ export function registerPlayDay(p: Profile, today: DayKey): void {
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+const QUEST_IDS: QuestId[] = ['answer', 'levels', 'perfect', 'speed', 'sprint', 'streak'];
+
+function parseQuests(raw: unknown): QuestDay | null {
+  if (!isRecord(raw) || typeof raw['day'] !== 'string' || !Array.isArray(raw['items'])) return null;
+  const items: QuestItem[] = [];
+  for (const it of raw['items'] as unknown[]) {
+    if (!isRecord(it) || !QUEST_IDS.includes(it['id'] as QuestId)) continue;
+    const goal = Math.max(1, Math.min(100, Math.floor(Number(it['goal']) || 1)));
+    items.push({
+      id: it['id'] as QuestId,
+      goal,
+      progress: Math.max(0, Math.min(goal, Math.floor(Number(it['progress']) || 0))),
+      claimed: it['claimed'] === true,
+    });
+  }
+  return items.length ? { day: raw['day'], items: items.slice(0, 3), bonusClaimed: raw['bonusClaimed'] === true } : null;
+}
+
 /** Valida lo mínimo de un archivo de guardado (por ejemplo, una copia importada). */
 export function parseSave(raw: string): SaveFile | null {
   let data: unknown;
@@ -249,6 +321,17 @@ export function parseSave(raw: string): SaveFile | null {
         return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.min(Math.round(v), 3_600_000) : 0;
       });
     }
+    const st = isRecord(item['stats']) ? item['stats'] : {};
+    const stats = emptyStats();
+    for (const key of Object.keys(stats) as Array<keyof Stats>) {
+      const v = Number(st[key]);
+      stats[key] = Number.isFinite(v) && v > 0 ? Math.min(Math.floor(v), 10_000_000) : 0;
+    }
+    merged.stats = stats;
+    merged.achievements = Array.isArray(item['achievements'])
+      ? [...new Set((item['achievements'] as unknown[]).filter((x): x is string => typeof x === 'string' && /^[a-z0-9-]{1,32}$/.test(x)))]
+      : [];
+    merged.quests = parseQuests(item['quests']);
     const en = Number(item['energy']);
     merged.energy = item['energy'] === undefined || !Number.isFinite(en) ? MAX_ENERGY : Math.max(0, Math.min(MAX_ENERGY, Math.floor(en)));
     const at = Number(item['energyAt']);

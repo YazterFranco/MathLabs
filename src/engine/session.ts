@@ -77,6 +77,8 @@ export class Session {
   chispaArmed = false;
   chispaBonus = 0;
   lost = false;
+  /** Se cortó desde fuera (por ejemplo, se acabó el tiempo del Contrarreloj). */
+  ended = false;
   private answeredCurrent = false;
   /** Dificultad base de un nivel adaptativo (para mostrar «reto extra» cuando sube). */
   baseDifficulty: Difficulty | null = null;
@@ -111,7 +113,12 @@ export class Session {
     return this.records.filter((r) => r.correct).length;
   }
   get finished(): boolean {
-    return this.lost || (this.answeredCurrent && this.index >= this.total - 1);
+    return this.lost || this.ended || (this.answeredCurrent && this.index >= this.total - 1);
+  }
+
+  /** Termina la partida tal como está (se acabó el tiempo). */
+  stop(): void {
+    this.ended = true;
   }
   get usesHearts(): boolean {
     return this.kind === 'level';
@@ -151,7 +158,7 @@ export class Session {
   }
 
   answer(choice: string): AnswerResult {
-    if (this.answeredCurrent || this.lost) {
+    if (this.answeredCurrent || this.lost || this.ended) {
       return { correct: false, combo: null, finished: this.finished, doubled: false };
     }
     const q = this.current;

@@ -1,5 +1,14 @@
 import { COSTUMES, STICKERS } from '../data/shop.ts';
-import { ALL_REGIONS, LEVELS_PER_REGION, MAX_ENERGY, WORLDS, WORLD_PRIZE_STARS, findRegion, type Region } from '../data/worlds.ts';
+import {
+  ALL_REGIONS,
+  LEVELS_PER_REGION,
+  MAX_ENERGY,
+  SPRINT_MAX_STARS,
+  WORLDS,
+  WORLD_PRIZE_STARS,
+  findRegion,
+  type Region,
+} from '../data/worlds.ts';
 import { addDays, type DayKey } from './dates.ts';
 import { recentAccuracy } from './adaptive.ts';
 import { adjustEnergy } from './energy.ts';
@@ -26,7 +35,9 @@ export type LevelRef =
   | { kind: 'guardian'; regionId: string }
   | { kind: 'review'; skillIds: string[] }
   /** «Recargar practicando»: preguntas fáciles que devuelven energía; no cambian el progreso. */
-  | { kind: 'recharge' };
+  | { kind: 'recharge' }
+  /** Contrarreloj de 60 segundos con lo que el niño ya conoce. */
+  | { kind: 'sprint' };
 
 export interface Reward {
   wallet: number;
@@ -44,6 +55,8 @@ export interface Reward {
   newRecord: boolean;
   /** Premio por completar el mundo (primera vez que se vence al Guardián de la quinta región). */
   worldPrize: { stars: number } | null;
+  /** Contrarreloj: mejoró su mejor marca. */
+  sprintRecord: boolean;
 }
 
 /** Datos que el juego mide fuera del motor: tiempo y reloj. */
@@ -98,6 +111,20 @@ export function dueSkills(p: Profile, today: DayKey): string[] {
       return accA - accB || String(a.nextReview).localeCompare(String(b.nextReview)) || ida.localeCompare(idb);
     })
     .map(([id]) => id);
+}
+
+export type NextStep = { kind: 'level'; regionId: string; level: number } | { kind: 'guardian'; regionId: string };
+
+/** Lo siguiente por jugar en el camino: el primer nivel sin estrellas o el Guardián pendiente. */
+export function nextStep(p: Profile): NextStep | null {
+  for (const region of ALL_REGIONS) {
+    if (!isRegionUnlocked(p, region.id)) return null;
+    const rp = regionProgress(p, region.id);
+    if (rp.guardianPassed) continue;
+    const level = rp.levels.slice(0, LEVELS_PER_REGION).findIndex((s) => s === 0);
+    return level >= 0 ? { kind: 'level', regionId: region.id, level } : { kind: 'guardian', regionId: region.id };
+  }
+  return null;
 }
 
 /**
@@ -161,6 +188,7 @@ export function applyOutcome(
     activeMs: 0,
     newRecord: false,
     worldPrize: null,
+    sprintRecord: false,
   };
   const nowMs = extra.nowMs ?? Date.now();
   registerPlayDay(p, today);
@@ -181,6 +209,8 @@ export function applyOutcome(
       reward.energyGain += 1;
     }
     const completed = !outcome.lost && outcome.answered >= outcome.total;
+    if (completed) p.stats.levels += 1;
+    if (outcome.perfect) p.stats.perfects += 1;
     if (completed && extra.activeMs !== undefined && extra.activeMs > 0) {
       const ms = Math.round(extra.activeMs);
       const prev = rp.best[ref.level] ?? 0;
@@ -195,10 +225,18 @@ export function applyOutcome(
         reward.wallet += bonus.stars;
         reward.energyGain += bonus.energy;
         if (bonus.power) reward.powerGift ??= randomPower(rng);
+        p.stats.speedBonuses += 1;
+        if (reward.speed === 'rayo') p.stats.rayoBonuses += 1;
       }
     }
   } else if (ref.kind === 'recharge') {
-    // La energía se entrega acierto a acierto mientras se practica; aquí solo cuenta como día jugado.
+    // La energía se entrega acierto a acierto mientras se practica; aquí solo se cuenta la recarga.
+    if (outcome.correct > 0) p.stats.recharges += 1;
+  } else if (ref.kind === 'sprint') {
+    p.stats.sprints += 1;
+    reward.sprintRecord = outcome.correct > p.stats.sprintBest;
+    p.stats.sprintBest = Math.max(p.stats.sprintBest, outcome.correct);
+    reward.wallet = Math.min(SPRINT_MAX_STARS, outcome.correct);
   } else if (ref.kind === 'guardian') {
     const { region, world, index } = findRegion(ref.regionId);
     const main = region.skillIds[0] as string;
@@ -214,6 +252,7 @@ export function applyOutcome(
     }
     if (outcome.passed && !rp.guardianPassed) {
       rp.guardianPassed = true;
+      p.stats.guardians += 1;
       reward.regionCompleted = true;
       reward.wallet = 10;
       reward.powerGift = 'pista';

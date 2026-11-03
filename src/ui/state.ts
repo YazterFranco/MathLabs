@@ -1,6 +1,7 @@
+import type { Achievement } from '../engine/achievements.ts';
 import type { DayKey } from '../engine/dates.ts';
 import type { LevelRef, Reward } from '../engine/progress.ts';
-import type { Profile, SaveFile } from '../engine/save.ts';
+import type { Profile, QuestItem, SaveFile } from '../engine/save.ts';
 import type { ComboEvent, Outcome, Session } from '../engine/session.ts';
 import type { PowerKind } from '../engine/types.ts';
 
@@ -14,6 +15,7 @@ export type Screen =
   | 'result'
   | 'shop'
   | 'energy'
+  | 'achievements'
   | 'world-summary'
   | 'parents'
   | 'sleep'
@@ -43,6 +45,10 @@ export interface PlayState {
   qStart: number | null;
   /** Tiempo meta del nivel en segundos (0 si la partida no se cronometra). */
   parSec: number;
+  /** Contrarreloj: instante (ms) en que se acaba el tiempo. */
+  deadline: number | null;
+  /** Misiones del día que se completaron durante esta partida. */
+  questsDone: QuestItem[];
 }
 
 export interface ResultState {
@@ -52,6 +58,9 @@ export interface ResultState {
   tip: string | null;
   /** Tiempo meta del nivel (segundos); 0 si no se cronometró. */
   parSec: number;
+  /** Logros conseguidos con esta partida. */
+  unlocked: Achievement[];
+  questsDone: QuestItem[];
 }
 
 export interface GateState {

@@ -1,0 +1,81 @@
+# Compila el APK de Android con Capacitor: el juego va empaquetado dentro de la app y funciona sin internet.
+# Se ejecuta a mano (pestaña Actions → «APK de Android» → Run workflow) o al subir una etiqueta v*.
+name: APK de Android
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Compilar el juego
+        run: npm run build
+
+      - name: Instalar Capacitor (solo en CI, no en el proyecto web)
+        run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/assets@3
+
+      - name: Crear el proyecto Android
+        run: |
+          npx cap add android
+          npx capacitor-assets generate --android --iconBackgroundColor '#1c1452' --splashBackgroundColor '#1c1452'
+          npx cap sync android
+
+      - name: Compilar APK (depuración)
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Firmar versión de lanzamiento (si hay llave configurada)
+        if: env.HAS_KEY == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        working-directory: android
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+          ./gradlew bundleRelease assembleRelease --no-daemon
+          BT=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
+          "$ANDROID_HOME/build-tools/$BT/apksigner" sign --ks release.jks --ks-pass env:KEYSTORE_PASSWORD \
+            --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASSWORD \
+            --out app/build/outputs/apk/release/matemundo-release.apk app/build/outputs/apk/release/app-release-unsigned.apk
+          jarsigner -keystore release.jks -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" \
+            app/build/outputs/bundle/release/app-release.aab "$KEY_ALIAS"
+          rm release.jks
+
+      - name: Renombrar APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk matemundo-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: matemundo-apk
+          path: |
+            matemundo-debug.apk
+            android/app/build/outputs/apk/release/matemundo-release.apk
+            android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: warn
+
+      - name: Publicar en Releases (solo con etiqueta v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" matemundo-debug.apk --title "Matemundo $GITHUB_REF_NAME" --notes "APK de Android generado automáticamente." || gh release upload "$GITHUB_REF_NAME" matemundo-debug.apk --clobber

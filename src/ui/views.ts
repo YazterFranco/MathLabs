@@ -7,6 +7,8 @@ import {
   MAX_ENERGY,
   RAYO_TIME_RATIO,
   RECHARGE_QUESTIONS,
+  SPRINT_MAX_STARS,
+  SPRINT_MS,
   UPCOMING_WORLDS,
   WORLD_PRIZE_STARS,
   WORLDS,
@@ -21,10 +23,12 @@ import {
   isWorldUnlocked,
   regionStars,
 } from '../engine/progress.ts';
+import { ACHIEVEMENTS, ACHIEVEMENT_STARS, achievementProgress } from '../engine/achievements.ts';
 import { msToNextEnergy } from '../engine/energy.ts';
+import { QUESTS, QUEST_BONUS_STARS, QUEST_REWARD, ensureQuests, questText } from '../engine/quests.ts';
 import { MASTERY_EMOJI, MASTERY_LABEL } from '../engine/mastery.ts';
 import { MEDAL_EMOJI, MEDAL_NAME, worldSummary } from '../engine/summary.ts';
-import { CHEST_ENERGY } from '../engine/progress.ts';
+import { CHEST_ENERGY, nextStep } from '../engine/progress.ts';
 import { SPEED_BONUS, formatClock, liveTier } from '../engine/time.ts';
 import { getSkill } from '../engine/questions.ts';
 import { recentAccuracy, needsSupport } from '../engine/adaptive.ts';
@@ -100,12 +104,29 @@ function gate(v: ViewState): string {
 
 /* ───────────── Pantallas ───────────── */
 
+/** Símbolos que flotan detrás de la portada: [texto, x %, y %, tamaño rem, giro, retraso]. */
+const FLOATERS: Array<[string, number, number, number, number, number]> = [
+  ['+', 8, 10, 3.4, -12, 0],
+  ['×', 80, 8, 3, 14, 1.2],
+  ['7', 88, 38, 4, -8, 0.6],
+  ['÷', 6, 46, 3.2, 10, 2],
+  ['π', 76, 70, 3.6, -14, 0.3],
+  ['3', 14, 80, 3.8, 12, 1.6],
+  ['=', 46, 4, 2.6, 0, 2.4],
+  ['½', 52, 90, 3, -6, 0.9],
+  ['−', 30, 64, 2.4, 0, 3],
+];
+
 function welcome(v: ViewState): string {
   const hasProfiles = v.save.profiles.length > 0;
+  const floaters = FLOATERS.map(
+    ([t, x, y, size, r, d]) => `<span style="--x:${x}%;--y:${y}%;--s:${size}rem;--r:${r}deg;--d:${d}s">${t}</span>`,
+  ).join('');
   return `<main class="screen welcome">
+    <div class="floaters" aria-hidden="true">${floaters}</div>
     <div class="logo" aria-hidden="true">🧮</div>
     <h1 class="brand">Matemundo</h1>
-    <p class="lead">Explora mundos, vence a los Guardianes y domina las mates paso a paso.</p>
+    <p class="lead">Explora 11 mundos, vence a los Guardianes y domina las mates paso a paso.</p>
     ${
       v.profile
         ? `${button('continue-as', `Continuar como ${esc(v.profile.avatar)} ${esc(v.profile.nickname)}`, 'btn-primary btn-xl', `data-id="${esc(v.profile.id)}"`)}
@@ -176,13 +197,15 @@ function create(): string {
   </main>`;
 }
 
-function regionNode(p: Profile, region: Region): string {
+function regionNode(p: Profile, region: Region, i: number, current: string | null): string {
   const unlocked = isRegionUnlocked(p, region.id);
   const rp = regionProgress(p, region.id);
   const earned = regionStars(p, region.id);
   const state = rp.guardianPassed ? 'done' : unlocked ? 'open' : 'locked';
+  const here = current === region.id;
   const label = `${region.name}. ${state === 'locked' ? 'Bloqueada' : state === 'done' ? 'Guardián vencido' : starsLabel(earned, LEVELS_PER_REGION * 3)}`;
-  return `<li class="node ${state}">
+  return `<li class="node ${state} ${here ? 'is-current' : ''}" style="--i:${i}">
+    ${here ? '<span class="here" aria-hidden="true">¡Aquí!</span>' : ''}
     <button type="button" class="node-btn" ${unlocked ? `data-action="open-region" data-id="${region.id}"` : 'disabled'} aria-label="${esc(label)}">
       <span class="node-emoji" aria-hidden="true">${unlocked ? region.emoji : '🔒'}</span>
     </button>
@@ -191,22 +214,97 @@ function regionNode(p: Profile, region: Region): string {
   </li>`;
 }
 
-function worldBlock(p: Profile, world: World): string {
+function worldBlock(p: Profile, world: World, current: string | null): string {
   const open = isWorldUnlocked(p, world.id);
+  const passed = world.regions.filter((r) => regionProgress(p, r.id).guardianPassed).length;
+  const pct = Math.round((passed / world.regions.length) * 100);
   return `<section class="world" data-theme="${world.theme}" aria-label="${esc(world.name)}">
-    <h2><span aria-hidden="true">${world.emoji}</span> ${esc(world.name)}</h2>
-    <p class="muted">${esc(world.grade)} · ${esc(world.ages)}</p>
+    <header class="world-head">
+      <span class="world-emoji" aria-hidden="true">${world.emoji}</span>
+      <div>
+        <h2>${esc(world.name)}</h2>
+        <p class="muted">Mundo ${world.id} · ${esc(world.grade)} · ${esc(world.ages)}</p>
+      </div>
+    </header>
+    ${open ? `<div class="world-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${world.regions.length}" aria-valuenow="${passed}" aria-label="${passed} de ${world.regions.length} regiones"><span style="width:${pct}%"></span></div>` : ''}
     ${p.medals.includes(world.id) ? button('open-summary', `${MEDAL_EMOJI[worldSummary(p, world.id).tier]} Ver resumen del mundo`, 'btn-soft btn-small', `data-id="${world.id}"`) : ''}
-    ${open ? `<ol class="trail">${world.regions.map((r) => regionNode(p, r)).join('')}</ol>` : '<p class="locked-note">🔒 Vence al Guardián del mundo anterior para entrar.</p>'}
+    ${open ? `<ol class="trail">${world.regions.map((r, i) => regionNode(p, r, i, current)).join('')}</ol>` : '<p class="locked-note">🔒 Vence al Guardián del mundo anterior para entrar.</p>'}
   </section>`;
+}
+
+/** Tarjeta grande «Seguir jugando»: lleva directo a lo siguiente del camino. */
+function continueCard(p: Profile): string {
+  const step = nextStep(p);
+  if (!step) {
+    return `<section class="continue-card is-done"><p class="continue-kicker">¡Camino completo!</p>
+      <p class="continue-title">🏆 Venciste a todos los Guardianes</p>
+      <p class="continue-sub">Sigue con el Contrarreloj, los repasos y mejorando tus tiempos.</p></section>`;
+  }
+  const { world, region } = findRegion(step.regionId);
+  const what = step.kind === 'level' ? `Nivel ${step.level + 1} de ${LEVELS_PER_REGION}` : '🛡️ Reto del Guardián';
+  return `<button type="button" class="continue-card" data-action="continue-journey">
+    <span class="continue-emoji" aria-hidden="true">${region.emoji}</span>
+    <span class="continue-text">
+      <span class="continue-kicker">Seguir jugando</span>
+      <span class="continue-title">${esc(region.name)}</span>
+      <span class="continue-sub">${what} · ${world.emoji} ${esc(world.name)}</span>
+    </span>
+    <span class="continue-go" aria-hidden="true">▶</span>
+  </button>`;
+}
+
+function questsCard(v: ViewState, p: Profile): string {
+  const day = ensureQuests(p, v.today);
+  const rows = day.items
+    .map((q, i) => {
+      const pct = Math.round((q.progress / q.goal) * 100);
+      const done = q.progress >= q.goal;
+      const action = q.claimed
+        ? '<span class="quest-done" aria-label="Cobrada">✓</span>'
+        : done
+          ? `<button type="button" class="btn btn-gold btn-small" data-action="claim-quest" data-id="${i}">Cobrar</button>`
+          : `<span class="quest-count">${q.progress}/${q.goal}</span>`;
+      return `<li class="quest ${q.claimed ? 'is-claimed' : done ? 'is-ready' : ''}">
+        <span class="quest-emoji" aria-hidden="true">${QUESTS[q.id].emoji}</span>
+        <span class="quest-body"><span class="quest-text">${esc(questText(q))}</span>
+          <span class="quest-bar" aria-hidden="true"><span style="width:${pct}%"></span></span></span>
+        ${action}
+      </li>`;
+    })
+    .join('');
+  const allClaimed = day.items.every((q) => q.claimed);
+  return `<section class="card quests" aria-labelledby="quests-title">
+    <div class="card-head"><h2 id="quests-title">🎯 Misiones de hoy</h2><span class="muted">+${QUEST_REWARD.stars} ⭐ +${QUEST_REWARD.energy} ⚡ cada una</span></div>
+    <ul class="quest-list">${rows}</ul>
+    <p class="muted">${allClaimed ? '¡Misiones completas! Mañana hay nuevas.' : `Cobra las tres y gana un cofre: +${QUEST_BONUS_STARS} ⭐ y un poder.`}</p>
+  </section>`;
+}
+
+function tile(action: string, emoji: string, label: string, sub: string, cls = ''): string {
+  return `<li><button type="button" class="tile ${cls}" data-action="${action}">
+    <span class="tile-emoji" aria-hidden="true">${emoji}</span>
+    <span class="tile-label">${label}</span>
+    <span class="tile-sub">${sub}</span>
+  </button></li>`;
 }
 
 function map(v: ViewState): string {
   const p = v.profile as Profile;
   const chestReady = p.chestLastDay !== v.today;
+  const step = nextStep(p);
+  const current = step?.regionId ?? null;
   const timeline = UPCOMING_WORLDS.map(
     (w) => `<li><span aria-hidden="true">${w.emoji}</span> ${esc(w.name)} <span class="muted">${esc(w.grade)}</span></li>`,
   ).join('');
+  const got = ACHIEVEMENTS.filter((a) => p.achievements.includes(a.id)).length;
+  const tiles = [
+    chestReady ? tile('claim-chest', '🎁', 'Cofre del día', `+3 ⭐ +${CHEST_ENERGY} ⚡`, 'is-gold') : '',
+    tile('start-sprint', '⏱️', 'Contrarreloj', p.stats.sprintBest ? `Récord: ${p.stats.sprintBest}` : '60 segundos', 'is-hot'),
+    v.dueCount > 0 ? tile('start-review', '🔁', 'Repaso', `${v.dueCount} pendiente${v.dueCount === 1 ? '' : 's'}`, 'is-cool') : '',
+    tile('open-achievements', '🏅', 'Logros', `${got} de ${ACHIEVEMENTS.length}`),
+    tile('open-shop', '🛍️', 'Tienda', `⭐ ${p.wallet}`),
+    !p.placement && !regionProgress(p, 'w1r1').guardianPassed ? tile('start-placement', '🎯', 'Prueba de nivel', 'Empieza donde te toca') : '',
+  ].join('');
   return `<main class="screen map">
     <header class="topbar map-bar">
       ${button('go-home', '🏠 Inicio', 'btn-ghost btn-small', 'aria-label="Volver al inicio"')}
@@ -224,17 +322,14 @@ function map(v: ViewState): string {
         <p class="muted">Poderes: ${POWERS.map((k) => `${POWER_INFO[k].emoji} ${p.inventory[k]}`).join(' · ')}</p>
       </div>
     </section>
-    <div class="actions">
-      ${chestReady ? button('claim-chest', '🎁 Cofre del día', 'btn-gold') : '<span class="muted pill">🎁 Cofre abierto, vuelve mañana</span>'}
-      ${!p.placement && !regionProgress(p, 'w1r1').guardianPassed ? button('start-placement', '🎯 Prueba de nivel', 'btn-soft') : ''}
-      ${v.dueCount > 0 ? button('start-review', `🔁 Repaso (${v.dueCount})`, 'btn-primary') : ''}
-      ${button('open-shop', '🛍️ Tienda', 'btn-soft')}
-      ${button('open-parents', '👪 Familias', 'btn-ghost')}
-    </div>
-    ${WORLDS.map((w) => worldBlock(p, w)).join('')}
+    ${continueCard(p)}
+    ${questsCard(v, p)}
+    <ul class="tiles">${tiles}</ul>
+    ${WORLDS.map((w) => worldBlock(p, w, current)).join('')}
     ${timeline ? `<section class="upcoming"><h2>Próximamente</h2><ul>${timeline}</ul></section>` : ''}
-    <div class="actions">
+    <div class="actions footer-actions">
       ${button('go-home', '🏠 Ir al inicio', 'btn-soft')}
+      ${button('open-parents', '👪 Familias', 'btn-soft')}
       ${button('switch-profile', 'Cambiar de explorador', 'btn-ghost')}
     </div>
   </main>`;
@@ -305,6 +400,7 @@ function playTitle(play: PlayState): string {
   if (ref.kind === 'level') return `${findRegion(ref.regionId).region.name} · Nivel ${ref.level + 1}`;
   if (ref.kind === 'guardian') return `Reto del Guardián`;
   if (ref.kind === 'recharge') return 'Recargar energía';
+  if (ref.kind === 'sprint') return 'Contrarreloj';
   return 'Repaso';
 }
 
@@ -331,6 +427,10 @@ function playIntro(v: ViewState, play: PlayState): string {
   } else if (ref.kind === 'guardian') {
     body = `<p>${s.total} preguntas. Aquí no hay poderes ni corazones: demuestra lo que sabes. Con ${GUARDIAN_PASS_COUNT} aciertos pasas.</p>
       <p class="muted">Si no pasas, no pasa nada: practicas y vuelves a intentarlo.</p>`;
+  } else if (ref.kind === 'sprint') {
+    body = `<p class="big-emoji" aria-hidden="true">⏱️</p>
+      <p><strong>${SPRINT_MS / 1000} segundos</strong> para acertar todas las que puedas. Un error no te detiene: ves la respuesta y sigues.</p>
+      <p class="goal">Cada acierto vale ⭐ (hasta ${SPRINT_MAX_STARS}). Tu récord: <strong>${p.stats.sprintBest}</strong>. No gasta energía.</p>`;
   } else if (ref.kind === 'recharge') {
     body = `<p>${s.total} preguntas fáciles de lo que ya conoces. Cada acierto te devuelve <strong>1 ⚡</strong>. Sin prisa y sin perder energía.</p>
       <p class="muted">Ahora tienes ${p.energy} de ${MAX_ENERGY}.</p>`;
@@ -396,12 +496,17 @@ function playQuestion(v: ViewState, play: PlayState): string {
   const isRecharge = play.ref.kind === 'recharge';
   const status = s.usesHearts
     ? `<span class="hearts" aria-label="${s.hearts} de ${s.maxHearts} energías">${energyIcons(s.hearts, s.maxHearts)}</span>`
-    : isRecharge
+    : play.ref.kind === 'sprint'
+      ? ''
+      : isRecharge
       ? `<span class="hearts" aria-label="${p.energy} de ${MAX_ENERGY} energías">${energyIcons(p.energy)}</span>`
       : `<span class="muted">Sin ayudas</span>`;
-  const clock = play.parSec > 0 ? `<span class="clock t-${liveTier(s.activeMs, play.parSec)}" data-clock="level" aria-hidden="true">⏱ ${formatClock(s.activeMs)}</span>` : '';
+  const sprintLeft = play.deadline !== null ? Math.max(0, play.deadline - v.nowMs) : 0;
+  const clock = play.ref.kind === 'sprint'
+    ? `<span class="score-chip" aria-label="${s.correctCount} aciertos">✅ ${s.correctCount}</span><span class="clock ${sprintLeft <= 10_000 ? 't-late is-ending' : 't-veloz'}" data-clock="sprint" aria-hidden="true">⏱ ${formatClock(sprintLeft + 999)}</span>`
+    : play.parSec > 0 ? `<span class="clock t-${liveTier(s.activeMs, play.parSec)}" data-clock="level" aria-hidden="true">⏱ ${formatClock(s.activeMs)}</span>` : '';
   const streak = s.usesHearts && s.streak >= 2 ? `<span class="combo">🔥 ${s.streak}${s.chispaArmed ? ' ✨' : ''}</span>` : '';
-  const pct = Math.round((s.index / s.total) * 100);
+  const pct = play.ref.kind === 'sprint' && play.deadline !== null ? Math.round((1 - sprintLeft / SPRINT_MS) * 100) : Math.round((s.index / s.total) * 100);
   return `<main class="screen play">
     <header class="topbar">
       ${button('quit-play', '✕', 'btn-ghost btn-icon', 'aria-label="Salir de la partida"')}
@@ -460,6 +565,10 @@ function result(v: ViewState): string {
     title = o.passed ? '¡Venciste al Guardián!' : 'El Guardián resistió';
     sub = `${o.correct} de ${o.total} aciertos (hacen falta ${GUARDIAN_PASS_COUNT})`;
     head = `<p class="big-emoji" aria-hidden="true">${o.passed ? '🏅' : '🛡️'}</p>`;
+  } else if (r.ref.kind === 'sprint') {
+    title = rw.sprintRecord ? '¡Nuevo récord!' : '¡Se acabó el tiempo!';
+    sub = `${o.correct} aciertos en ${SPRINT_MS / 1000} segundos · récord ${p.stats.sprintBest}`;
+    head = `<p class="big-score" aria-hidden="true">${o.correct}</p>`;
   } else if (r.ref.kind === 'recharge') {
     title = o.correct > 0 ? '¡Energía recargada!' : 'Sigue practicando';
     sub = `${o.correct} de ${o.total} aciertos · ⚡ ${p.energy} de ${MAX_ENERGY}`;
@@ -492,6 +601,12 @@ function result(v: ViewState): string {
   if (rw.regionCompleted) lines.push('<li>🗺️ ¡Región completada!</li>');
   if (rw.worldCompleted) lines.push('<li>🌍 ¡Mundo completado!</li>');
   if (o.bestStreak >= 3 && r.ref.kind === 'level') lines.push(`<li>🔥 Mejor racha: ${o.bestStreak}</li>`);
+  for (const q of r.questsDone) lines.push(`<li class="bonus-line">🎯 Misión cumplida: ${esc(questText(q))} (cóbrala en el mapa)</li>`);
+  const badges = r.unlocked.length
+    ? `<section class="badges-won" aria-label="Logros nuevos">${r.unlocked
+        .map((a) => `<div class="badge-won"><span class="badge-emoji" aria-hidden="true">${a.emoji}</span><span><strong>¡Logro: ${esc(a.name)}!</strong><br /><span class="muted">${esc(a.desc)} · +${ACHIEVEMENT_STARS} ⭐</span></span></div>`)
+        .join('')}</section>`
+    : '';
 
   const worldPrize = rw.worldPrize
     ? `<section class="prize" aria-label="Premio del mundo">
@@ -511,6 +626,8 @@ function result(v: ViewState): string {
     buttons.push(button('result-next', last ? 'Ir al Guardián' : 'Siguiente nivel', rw.worldCompleted ? 'btn-soft' : 'btn-primary btn-xl'));
   } else if (r.ref.kind === 'guardian' && !o.passed) {
     buttons.push(button('result-retry', 'Intentar otra vez', 'btn-primary btn-xl'));
+  } else if (r.ref.kind === 'sprint') {
+    buttons.push(button('start-sprint', '⏱️ Jugar otra vez', 'btn-primary btn-xl'));
   } else if (r.ref.kind === 'recharge' && p.energy < MAX_ENERGY) {
     buttons.push(button('start-recharge', '🔋 Recargar otra vez', 'btn-primary btn-xl'));
   }
@@ -530,7 +647,10 @@ function result(v: ViewState): string {
     : '';
 
   const tip = r.tip ? `<section class="card tip"><p>💡 ${esc(r.tip)}</p></section>` : '';
+  const party =
+    (r.ref.kind === 'level' && o.stars === 3) || rw.worldCompleted || rw.regionCompleted || rw.sprintRecord || rw.speed === 'rayo' || r.unlocked.length > 0;
   return `<main class="screen result ${gameOver ? 'is-gameover' : ''}">
+    ${party ? confetti() : ''}
     <section class="card center">
       ${head}
       <h1>${esc(title)}</h1>
@@ -538,10 +658,60 @@ function result(v: ViewState): string {
       ${energyPanel}
       ${lines.length ? `<ul class="rewards">${lines.join('')}</ul>` : ''}
       ${worldPrize}
+      ${badges}
       <div class="stack">${buttons.join('')}</div>
     </section>
     ${missedList(r, gameOver)}
     ${tip}
+  </main>`;
+}
+
+const CONFETTI_COLORS = ['#ff5a36', '#ffc83d', '#4cd68d', '#5aa9ff', '#b86bff', '#ff7ac3'];
+
+/** Confeti hecho solo con CSS; con «reducir movimiento» no se muestra. */
+function confetti(): string {
+  const bits = Array.from({ length: 36 }, (_, i) => {
+    const x = (i * 37) % 100;
+    const delay = ((i * 13) % 20) / 20;
+    const dur = 1.6 + ((i * 7) % 10) / 10;
+    const rot = (i * 47) % 360;
+    const color = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+    return `<i style="--x:${x}%;--d:${delay}s;--t:${dur}s;--r:${rot}deg;--c:${color}"></i>`;
+  }).join('');
+  return `<div class="confetti" aria-hidden="true">${bits}</div>`;
+}
+
+/** Logros y estadísticas del explorador. */
+function achievementsScreen(v: ViewState): string {
+  const p = v.profile as Profile;
+  const st = p.stats;
+  const acc = st.answered ? Math.round((st.correct / st.answered) * 100) : 0;
+  const got = ACHIEVEMENTS.filter((a) => achievementProgress(p, a).done).length;
+  const cards = ACHIEVEMENTS.map((a) => {
+    const { value, done } = achievementProgress(p, a);
+    const pct = Math.round((value / a.goal) * 100);
+    return `<li class="badge ${done ? 'is-done' : ''}">
+      <span class="badge-emoji" aria-hidden="true">${a.emoji}</span>
+      <span class="badge-name">${esc(a.name)}</span>
+      <span class="badge-desc">${esc(a.desc)}</span>
+      ${done ? '<span class="badge-check">¡Conseguido!</span>' : `<span class="quest-bar" aria-label="${value} de ${a.goal}"><span style="width:${pct}%"></span></span><span class="badge-count">${value}/${a.goal}</span>`}
+    </li>`;
+  }).join('');
+  return `<main class="screen achievements">
+    ${topBar(p, 'Logros', { action: 'back-map', label: 'Mapa' })}
+    <section class="card">
+      <h2>Mi progreso</h2>
+      <ul class="stat-grid">
+        <li><strong>${st.correct}</strong><span>aciertos</span></li>
+        <li><strong>${acc}%</strong><span>precisión</span></li>
+        <li><strong>${st.levels}</strong><span>niveles</span></li>
+        <li><strong>${st.bestStreak}</strong><span>mejor racha</span></li>
+        <li><strong>${st.guardians}</strong><span>Guardianes</span></li>
+        <li><strong>${st.sprintBest}</strong><span>récord ⏱️</span></li>
+      </ul>
+    </section>
+    <h2>${got} de ${ACHIEVEMENTS.length} logros · +${ACHIEVEMENT_STARS} ⭐ cada uno</h2>
+    <ul class="badge-grid">${cards}</ul>
   </main>`;
 }
 
@@ -699,6 +869,7 @@ function parents(v: ViewState): string {
       <div class="toggles">
         <label class="toggle"><input type="checkbox" data-change="toggle-sound" ${p.settings.sound ? 'checked' : ''} /> Sonidos</label>
         <label class="toggle"><input type="checkbox" data-change="toggle-voice" ${p.settings.voice ? 'checked' : ''} /> Leer las preguntas en voz alta</label>
+        <label class="toggle"><input type="checkbox" data-change="toggle-vibrate" ${p.settings.vibrate ? 'checked' : ''} /> Vibrar al responder (en el móvil)</label>
       </div>
     </section>
     <section class="card"><h2>Progreso de ${esc(p.nickname)}</h2>
@@ -860,6 +1031,9 @@ export function renderView(v: ViewState): string {
       break;
     case 'world-summary':
       body = worldSummaryScreen(v);
+      break;
+    case 'achievements':
+      body = achievementsScreen(v);
       break;
     case 'parents':
       body = parents(v);

@@ -12,6 +12,10 @@ export const PAR_SECONDS_PER_QUESTION = [15, 15, 15, 15, 20, 20, 25, 25, 35, 35,
 export const TYPED_EXTRA_SECONDS = 10;
 /** Con el 60 % del tiempo meta o menos el bono es Rayo; con la meta o menos, Veloz. */
 export const RAYO_TIME_RATIO = 0.6;
+/** Contrarreloj: 60 segundos para acertar todo lo posible; las estrellas que da tienen tope. */
+export const SPRINT_MS = 60_000;
+export const SPRINT_QUESTIONS = 40;
+export const SPRINT_MAX_STARS = 15;
 /** Premio de completar un mundo (además del de la región). */
 export const WORLD_PRIZE_STARS = 20;
 export const GUARDIAN_QUESTIONS = 10;

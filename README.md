@@ -12,6 +12,11 @@ Juego web de matemáticas para niños, desde preescolar (5 años) hacia secundar
 - **Cronómetro y bonos por rapidez** (solo en niveles): el reloj cuenta el tiempo que el niño tarda en responder (una pausa larga cuenta 60 s como máximo). La meta depende del mundo (de 15 s por pregunta en el 1 a 40 s en el 11; +10 s por pregunta escrita). Con a lo sumo 1 error: terminar en la meta da el bono **Veloz** (+2 ⭐, +1 ⚡) y en el 60 % de la meta el bono **Rayo** (+4 ⭐, +1 ⚡ y un poder). Se guarda el mejor tiempo de cada nivel. El Guardián no se cronometra.
 - **Resumen y premio del mundo**: al vencer por primera vez al Guardián de la quinta región se gana la medalla del mundo (oro, plata o bronce según las estrellas), +20 ⭐, un poder de cada tipo y la energía llena. El resumen (estrellas, Guardianes, dominio y tiempos) se puede volver a abrir desde el mapa; al terminar el mundo 11 aparece la celebración final.
 - **Inicio**: el botón 🏠 está en el mapa y en cada pantalla; «Continuar como …» entra directo al mapa.
+- **Seguir jugando**: una tarjeta grande en el mapa abre directamente lo siguiente del camino (el primer nivel sin estrellas o el Guardián pendiente). En el sendero, la región actual tiene la marca «¡Aquí!».
+- **Misiones del día**: tres misiones al día (por ejemplo, «Responde bien 15 preguntas», «Juega un Contrarreloj», «Acierta 5 seguidas»), siempre las mismas durante el día. Cada una da +3 ⭐ y +1 ⚡ al cobrarla; cobrar las tres da un cofre con +5 ⭐ y un poder.
+- **Contrarreloj**: 60 segundos para acertar todo lo posible con lo que el niño ya conoce (las primeras 8 fáciles). Un error no detiene: se ve la respuesta y sigue. Cada acierto vale ⭐ (tope de 15), guarda el récord y no gasta energía.
+- **Logros y «Mi progreso»**: 21 logros a largo plazo (niveles, perfectos, aciertos, rachas, bonos, Guardianes, medallas, dominio…), +5 ⭐ cada uno, con barra de avance. La pantalla muestra aciertos, precisión, niveles, mejor racha, Guardianes y récord.
+- **Celebración y vibración**: confeti al lograr un nivel perfecto, un récord, un bono Rayo, un logro o un mundo (se apaga con «reducir movimiento»). En el móvil vibra al responder; se desactiva en el panel de familias.
 - **Respuesta escrita**: en el nivel 3 de las habilidades de cálculo (ecuaciones, descuentos, sistemas, funciones, trigonometría, logaritmos, progresiones, conteo, derivadas…), y en sus Guardianes, el niño escribe el resultado en vez de elegirlo (adivinar no sirve). Solo se aceptan números enteros; un texto inválido avisa y no cuenta como intento. La prueba de nivel y los repasos siguen con opciones.
 - **Dificultad adaptativa** (solo en niveles): empieza según el historial de la habilidad (más reto si ya es sólida, más calma si le cuesta). Con 3 aciertos seguidos sube un punto («🚀 Reto extra») y con 2 errores de 3 baja, siempre a ±1 de la dificultad del nivel. El Guardián **no se adapta**: es el examen. Los repasos priorizan lo que más cuesta, y el panel de familias marca con 🔧 las habilidades que conviene reforzar.
 - **Potenciadores**: Lupa (tacha 2 opciones), Pista mágica y Escudo (un error no rompe la racha). Una vez por nivel; se ganan jugando.
@@ -45,7 +50,8 @@ La URL admite `?seed=N` (partidas reproducibles) y `?e2e=1` (gancho `window.__ma
 src/engine/   motor sin interfaz: generadores de preguntas, sesión, dominio, progreso y guardado
 src/data/     mundos, regiones, tienda
 src/ui/       vistas (HTML como texto), clase App, sonido y voz
-public/       manifest PWA, service worker, icono y _headers
+assets/       íconos y splash para el APK (Capacitor)
+public/       manifest PWA, service worker, íconos, fuente Fredoka (OFL) y _headers
 scripts/      build.mjs y serve.mjs
 tests/        pruebas del motor y prueba E2E
 ```
@@ -72,6 +78,29 @@ npm run deploy              # compila y sube dist/ → https://matemundo.pages.d
 ```
 
 Para publicar cambios después: `npm run deploy`.
+
+## Generar el APK de Android
+
+El juego se empaqueta con [Capacitor](https://capacitorjs.com/): los archivos van **dentro** de la app, así que funciona sin internet y no necesita configurar dominios. Para un juego infantil también es la vía más segura con las políticas de Google Play para apps de niños (una TWA abre el sitio web dentro de Chrome).
+
+**Opción 1 (sin instalar nada): GitHub Actions.** En el repositorio, pestaña **Actions → «APK de Android» → Run workflow**. En unos 5 minutos aparece el archivo `matemundo-apk` en la ejecución: dentro está `matemundo-debug.apk`. Pásalo al teléfono y ábrelo (Android pedirá permitir «instalar apps desconocidas»). Si subes una etiqueta (`git tag v1.0.0 && git push origin v1.0.0`) el APK se publica además en **Releases**.
+
+**Opción 2 (en tu computadora).** Necesitas Node 22, JDK 21 y Android Studio:
+
+```bash
+npm run build
+npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/assets@3
+npx cap add android
+npx capacitor-assets generate --android
+npx cap sync android
+npx cap open android      # en Android Studio: Build → Build APK(s)
+```
+
+Los íconos y la pantalla de inicio salen de `assets/` (icono 1024 px, primer plano, fondo y splash).
+
+**Para Google Play** hace falta un APK/AAB **firmado** con tu llave. Crea una vez la llave (`keytool -genkey -v -keystore matemundo.jks -keyalg RSA -keysize 2048 -validity 10000 -alias matemundo`), guárdala en un lugar seguro y añade en GitHub (Settings → Secrets → Actions) `ANDROID_KEYSTORE_BASE64` (el archivo en base64), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` y `ANDROID_KEY_PASSWORD`. Con esos secretos el workflow también genera `matemundo-release.apk` y `app-release.aab` firmados. La cuenta de desarrollador de Google Play cuesta 25 USD (pago único); al ser para niños, hay que completar el formulario de «Familias» y la política de privacidad (el juego no recoge datos: todo queda en el dispositivo).
+
+**Alternativa rápida (TWA):** [PWABuilder](https://www.pwabuilder.com/) genera un paquete Android a partir de `https://matemundo.pages.dev`. Abre el sitio en Chrome, pero necesita publicar `/.well-known/assetlinks.json` con la huella de tu llave.
 
 ## Pendiente
 

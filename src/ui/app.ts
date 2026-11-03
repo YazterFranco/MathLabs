@@ -1,10 +1,13 @@
-import { findRegion, LEVELS_PER_REGION, MAX_ENERGY, PLACEMENT_PASS_COUNT, WORLDS } from '../data/worlds.ts';
+import { findRegion, LEVELS_PER_REGION, MAX_ENERGY, PLACEMENT_PASS_COUNT, SPRINT_MS, WORLDS } from '../data/worlds.ts';
+import { checkAchievements, noteAnswer } from '../engine/achievements.ts';
+import { claimQuest, ensureQuests, trackQuests } from '../engine/quests.ts';
 import {
   buildAdaptiveLevel,
   buildGuardianQuestions,
   buildPlacementQuestions,
   buildRechargeQuestions,
   buildReviewQuestions,
+  buildSprintQuestions,
 } from '../engine/builders.ts';
 import { dayKey, type DayKey } from '../engine/dates.ts';
 import { adjustEnergy, msToNextEnergy, syncEnergy } from '../engine/energy.ts';
@@ -18,6 +21,7 @@ import {
   isGuardianUnlocked,
   isLevelUnlocked,
   isRegionUnlocked,
+  nextStep,
   rechargeSkillIds,
   type LevelRef,
 } from '../engine/progress.ts';
@@ -81,6 +85,8 @@ const GUARDED = new Set([
   'open-shop',
   'begin-placement',
   'start-recharge',
+  'start-sprint',
+  'continue-journey',
 ]);
 
 export class App {
@@ -205,8 +211,21 @@ export class App {
       if (this.screen !== 'play') this.render();
       return;
     }
+    const pl = this.play;
+    if (this.screen === 'play' && pl?.ref.kind === 'sprint' && pl.deadline !== null && pl.phase !== 'intro' && nowMs >= pl.deadline) {
+      // Se acabó el tiempo: cuenta lo respondido hasta aquí.
+      this.clearAdvance();
+      pl.session.stop();
+      this.finishPlay();
+      this.render();
+      return;
+    }
     for (const el of this.root.querySelectorAll<HTMLElement>('[data-clock]')) {
-      if (el.dataset['clock'] === 'energy') {
+      if (el.dataset['clock'] === 'sprint' && pl?.deadline) {
+        const left = Math.max(0, pl.deadline - nowMs);
+        el.textContent = `⏱ ${formatClock(left + 999)}`;
+        el.className = `clock ${left <= 10_000 ? 't-late is-ending' : 't-veloz'}`;
+      } else if (el.dataset['clock'] === 'energy') {
         const left = msToNextEnergy(p, nowMs);
         el.textContent = left === null ? '' : `+1 ⚡ en ${formatClock(left + 999)}`;
       } else if (el.dataset['clock'] === 'level' && this.play) {
@@ -226,7 +245,10 @@ export class App {
   private viewState(): ViewState {
     const p = this.profile;
     const nowMs = this.now().getTime();
-    if (p) syncEnergy(p, nowMs);
+    if (p) {
+      syncEnergy(p, nowMs);
+      ensureQuests(p, this.today);
+    }
     return {
       nowMs,
       summaryWorldId: this.summaryWorldId,
@@ -301,6 +323,10 @@ export class App {
       p.settings.voice = (el as HTMLInputElement).checked;
       if (!p.settings.voice) this.speech.stop();
       this.save();
+    } else if (kind === 'toggle-vibrate' && p) {
+      p.settings.vibrate = (el as HTMLInputElement).checked;
+      this.save();
+      if (p.settings.vibrate) this.buzz(30);
     } else if (kind === 'import-file') {
       const file = (el as HTMLInputElement).files?.[0];
       if (file) void this.readImport(file);
@@ -392,6 +418,18 @@ export class App {
         break;
       case 'start-recharge':
         this.startRecharge();
+        break;
+      case 'start-sprint':
+        this.startSprint();
+        break;
+      case 'continue-journey':
+        this.continueJourney();
+        break;
+      case 'claim-quest':
+        this.claimQuestAt(Number(id));
+        break;
+      case 'open-achievements':
+        this.go('achievements');
         break;
       case 'open-summary':
         this.openSummary(Number(id));
@@ -576,7 +614,7 @@ export class App {
     const p = this.profile as Profile;
     this.clearAdvance();
     const loadout = new Set<PowerKind>(session.allowsPowers ? POWERS.filter((k) => p.inventory[k] > 0) : []);
-    this.play = { ref, session, phase: 'intro', loadout, pick: null, feedback: null, note: null, qStart: null, parSec };
+    this.play = { ref, session, phase: 'intro', loadout, pick: null, feedback: null, note: null, qStart: null, parSec, deadline: null, questsDone: [] };
     this.result = null;
     this.go('play');
   }
@@ -607,6 +645,63 @@ export class App {
     }
     const qs = buildRechargeQuestions(this.rng, rechargeSkillIds(p));
     this.startPlay({ kind: 'recharge' }, new Session('review', qs));
+  }
+
+  private startSprint(): void {
+    const p = this.profile;
+    if (!p) return;
+    const qs = buildSprintQuestions(this.rng, rechargeSkillIds(p, 8));
+    this.startPlay({ kind: 'sprint' }, new Session('review', qs));
+  }
+
+  /** «Seguir jugando»: abre directamente lo siguiente del camino. */
+  private continueJourney(): void {
+    const p = this.profile;
+    if (!p) return;
+    const step = nextStep(p);
+    if (!step) {
+      this.showToast('¡Completaste todo el camino! Juega el Contrarreloj o repasa.');
+      return;
+    }
+    this.regionId = step.regionId;
+    if (step.kind === 'level') this.startLevel(step.level);
+    else this.startGuardian();
+  }
+
+  private claimQuestAt(index: number): void {
+    const p = this.profile;
+    if (!p) return;
+    const res = claimQuest(p, index, this.today, this.rng, this.now().getTime());
+    if (!res) return;
+    this.sound.play('chest');
+    this.buzz([20, 40, 20]);
+    const parts = [`+${res.stars} ⭐`];
+    if (res.energy > 0) parts.push(`+${res.energy} ⚡`);
+    if (res.bonusPower) parts.push(`${POWER_INFO[res.bonusPower].emoji} ${POWER_INFO[res.bonusPower].name}`);
+    this.save();
+    this.showToast(`🎯 ¡Misión cobrada! ${parts.join(' · ')}${res.bonusPower ? ' ¡Las tres hechas!' : ''}`);
+    this.awardAchievements();
+  }
+
+  /** Logros fuera de una partida (tienda, misiones, cofre): se avisan con un mensaje. */
+  private awardAchievements(): void {
+    const p = this.profile;
+    if (!p) return;
+    const fresh = checkAchievements(p);
+    if (!fresh.length) return;
+    this.save();
+    this.showToast(`🏅 ¡Logro: ${fresh.map((a) => `${a.emoji} ${a.name}`).join(', ')}! +${fresh.length * 5} ⭐`);
+  }
+
+  private buzz(pattern: number | number[]): void {
+    const p = this.profile;
+    const nav = this.root.ownerDocument.defaultView?.navigator as (Navigator & { vibrate?: (p: number | number[]) => boolean }) | undefined;
+    if (!p?.settings.vibrate || !nav?.vibrate) return;
+    try {
+      nav.vibrate(pattern);
+    } catch {
+      /* algunos navegadores lo bloquean: no pasa nada */
+    }
   }
 
   private openSummary(worldId: number): void {
@@ -647,6 +742,7 @@ export class App {
     if (!pl || pl.phase !== 'intro') return;
     pl.phase = 'asking';
     pl.qStart = this.now().getTime();
+    if (pl.ref.kind === 'sprint') pl.deadline = pl.qStart + SPRINT_MS;
     this.speakIfEnabled();
   }
 
@@ -691,6 +787,7 @@ export class App {
     const q = pl.session.current;
     const res = pl.session.answer(choice);
     recordAttempt(p, q.skillId, res.correct, this.today);
+    noteAnswer(p, res.correct, pl.session.streak);
     this.save();
     pl.pick = choice;
     pl.phase = 'feedback';
@@ -766,21 +863,29 @@ export class App {
     // La energía es del niño y se conserva entre partidas: cada error gasta una y cada Rayo devuelve una.
     if (s.usesHearts && s.hearts !== heartsBefore) adjustEnergy(p, s.hearts - heartsBefore, nowMs);
     if (pl.ref.kind === 'recharge' && res.correct) adjustEnergy(p, 1, nowMs);
+    noteAnswer(p, res.correct, s.streak);
+    pl.questsDone.push(...trackQuests(p, this.today, { type: 'answer', correct: res.correct, streak: s.streak }));
     this.save();
     const neutral = s.kind === 'guardian';
+    const sprint = pl.ref.kind === 'sprint';
     pl.pick = choice;
     pl.phase = 'feedback';
     pl.note = null;
-    pl.feedback = { correct: res.correct, combo: res.combo, doubled: res.doubled, neutral, explain: !neutral && !res.correct };
+    // En el Contrarreloj el error también avanza solo (se ve la respuesta correcta un momento).
+    pl.feedback = { correct: res.correct, combo: res.combo, doubled: res.doubled, neutral, explain: !neutral && !res.correct && !sprint };
     if (!neutral) this.sound.play(res.combo ? 'combo' : res.correct ? 'ok' : 'bad');
+    if (!neutral) this.buzz(res.correct ? 12 : [35, 40, 35]);
     if (!pl.feedback.explain) {
       this.clearAdvance();
-      this.advanceTimer = setTimeout(() => {
-        this.advanceTimer = null;
-        this.tickClock();
-        this.advance();
-        this.render();
-      }, neutral ? 650 : 1000);
+      this.advanceTimer = setTimeout(
+        () => {
+          this.advanceTimer = null;
+          this.tickClock();
+          this.advance();
+          this.render();
+        },
+        sprint ? (res.correct ? 350 : 1100) : neutral ? 650 : 1000,
+      );
     }
   }
 
@@ -812,6 +917,12 @@ export class App {
       parSeconds: pl.parSec,
       nowMs: this.now().getTime(),
     });
+    if (pl.ref.kind === 'level' && !outcome.lost) {
+      pl.questsDone.push(...trackQuests(p, this.today, { type: 'level', perfect: outcome.perfect, speed: reward.speed !== null }));
+    } else if (pl.ref.kind === 'sprint') {
+      pl.questsDone.push(...trackQuests(p, this.today, { type: 'sprint' }));
+    }
+    const unlocked = checkAchievements(p);
     this.save();
     let tip: string | null = null;
     if (pl.ref.kind === 'level' || pl.ref.kind === 'guardian') {
@@ -819,14 +930,15 @@ export class App {
       if (needsTip) tip = getSkill(findRegion(pl.ref.regionId).region.skillIds[0] as string).tip;
       this.regionId = pl.ref.regionId;
     }
-    this.result = { ref: pl.ref, outcome, reward, tip, parSec: pl.parSec };
+    this.result = { ref: pl.ref, outcome, reward, tip, parSec: pl.parSec, unlocked, questsDone: pl.questsDone };
     this.sound.play(
       outcome.lost || (pl.ref.kind === 'guardian' && !outcome.passed)
         ? 'lose'
-        : reward.chest || reward.regionCompleted || reward.speed
+        : reward.chest || reward.regionCompleted || reward.speed || unlocked.length
           ? 'chest'
           : 'win',
     );
+    if (!outcome.lost) this.buzz([30, 60, 30]);
     this.go('result');
   }
 
@@ -869,6 +981,7 @@ export class App {
       this.sound.play('chest');
       this.showToast('¡Compra hecha!');
       this.save();
+      this.awardAchievements();
     } else if (res === 'poor') this.showToast('Aún te faltan estrellas. ¡Sigue jugando!');
     else if (res === 'owned') this.showToast('Ya lo tienes.');
   }

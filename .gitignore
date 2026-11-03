@@ -5,3 +5,6 @@ dist
 .DS_Store
 .env
 .env.*
+
+# Proyecto Android que genera Capacitor en CI
+android/

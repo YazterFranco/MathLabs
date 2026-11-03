@@ -2,6 +2,7 @@ import {
   GUARDIAN_QUESTIONS,
   QUESTIONS_PER_LEVEL,
   RECHARGE_QUESTIONS,
+  SPRINT_QUESTIONS,
   REVIEW_QUESTIONS,
   type Region,
   type World,
@@ -103,6 +104,18 @@ export function buildRechargeQuestions(rng: Rng, skillIds: string[], count: numb
   for (let i = 0; i < count; i++) {
     if (!bag.length) bag = rng.shuffle([...pool]);
     plan.push({ skillId: bag.pop() as string, difficulty: 1 });
+  }
+  return buildSet(rng, plan);
+}
+
+/** Contrarreloj: mezcla de lo que el niño ya conoce; las primeras 8 fáciles y luego dificultad 2. */
+export function buildSprintQuestions(rng: Rng, skillIds: string[], count: number = SPRINT_QUESTIONS): Question[] {
+  const pool = skillIds.length ? skillIds : ['count10'];
+  const plan: Array<{ skillId: string; difficulty: Difficulty }> = [];
+  let bag: string[] = [];
+  for (let i = 0; i < count; i++) {
+    if (!bag.length) bag = rng.shuffle([...pool]);
+    plan.push({ skillId: bag.pop() as string, difficulty: i < 8 ? 1 : 2 });
   }
   return buildSet(rng, plan);
 }
