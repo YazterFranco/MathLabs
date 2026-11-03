@@ -1,5 +1,6 @@
 # Compila el APK de Android con Capacitor: el juego va empaquetado dentro de la app y funciona sin internet.
 # Se ejecuta a mano (pestaña Actions → «APK de Android» → Run workflow) o al subir una etiqueta v*.
+# Cada ejecución publica el APK en la sección Releases del repositorio.
 name: APK de Android
 
 on:
@@ -74,8 +75,12 @@ jobs:
             android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: warn
 
-      - name: Publicar en Releases (solo con etiqueta v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publicar en Releases (descarga directa del APK)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" matemundo-debug.apk --title "Matemundo $GITHUB_REF_NAME" --notes "APK de Android generado automáticamente." || gh release upload "$GITHUB_REF_NAME" matemundo-debug.apk --clobber
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then TAG="$GITHUB_REF_NAME"; else TAG="v1.0.${{ github.run_number }}"; fi
+          cp matemundo-debug.apk "matemundo-$TAG.apk"
+          gh release create "$TAG" "matemundo-$TAG.apk" --target "$GITHUB_SHA" --title "Matemundo $TAG" \
+            --notes "APK de Android para instalar directamente (no es la versión de Google Play). Descarga el archivo .apk de abajo." \
+            || gh release upload "$TAG" "matemundo-$TAG.apk" --clobber

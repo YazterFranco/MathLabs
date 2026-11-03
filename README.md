@@ -83,7 +83,7 @@ Para publicar cambios después: `npm run deploy`.
 
 El juego se empaqueta con [Capacitor](https://capacitorjs.com/): los archivos van **dentro** de la app, así que funciona sin internet y no necesita configurar dominios. Para un juego infantil también es la vía más segura con las políticas de Google Play para apps de niños (una TWA abre el sitio web dentro de Chrome).
 
-**Opción 1 (sin instalar nada): GitHub Actions.** En el repositorio, pestaña **Actions → «APK de Android» → Run workflow**. En unos 5 minutos aparece el archivo `matemundo-apk` en la ejecución: dentro está `matemundo-debug.apk`. Pásalo al teléfono y ábrelo (Android pedirá permitir «instalar apps desconocidas»). Si subes una etiqueta (`git tag v1.0.0 && git push origin v1.0.0`) el APK se publica además en **Releases**.
+**Opción 1 (sin instalar nada): GitHub Actions.** En el repositorio, pestaña **Actions → «APK de Android» → Run workflow**. En unos 5 minutos el APK queda publicado en **Releases** (`matemundo-v1.0.N.apk`), listo para descargar desde el teléfono; también queda como archivo `matemundo-apk` en la ejecución. Ábrelo en Android (pedirá permitir «instalar apps desconocidas»).
 
 **Opción 2 (en tu computadora).** Necesitas Node 22, JDK 21 y Android Studio:
 
